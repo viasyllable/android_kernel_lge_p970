@@ -1087,7 +1087,13 @@ static int musb_gadget_disable(struct usb_ep *ep)
 	void __iomem	*epio;
 	int		status = 0;
 
+	printk(KERN_INFO "musb_gadget_disable + ----*[disconnect]*----\n");
+
 	musb_ep = to_musb_ep(ep);
+	if (!musb_ep) {
+		WARN_ON(1);
+		return -EFAULT;
+	}
 	musb = musb_ep->musb;
 	epnum = musb_ep->current_epnum;
 	epio = musb->endpoints[epnum].regs;
@@ -1563,7 +1569,7 @@ static void musb_pullup(struct musb *musb, int is_on)
 	musb_writeb(musb->mregs, MUSB_POWER, power);
 }
 
-#if 0
+#if 1
 static int musb_gadget_vbus_session(struct usb_gadget *gadget, int is_active)
 {
 	DBG(2, "<= %s =>\n", __func__);
@@ -1614,7 +1620,7 @@ static const struct usb_gadget_ops musb_gadget_operations = {
 	.get_frame		= musb_gadget_get_frame,
 	.wakeup			= musb_gadget_wakeup,
 	.set_selfpowered	= musb_gadget_set_self_powered,
-	/* .vbus_session		= musb_gadget_vbus_session, */
+	.vbus_session		= musb_gadget_vbus_session,
 	.vbus_draw		= musb_gadget_vbus_draw,
 	.pullup			= musb_gadget_pullup,
 };
@@ -1806,6 +1812,12 @@ int usb_gadget_register_driver(struct usb_gadget_driver *driver)
 					driver->driver.name, retval);
 			musb->gadget_driver = NULL;
 			musb->g.dev.driver = NULL;
+/* LGE_CHANGE_S kenneth.kang@lge.com 2011-01-16 USB patch */			
+		} else {
+			if (musb_platform_get_vbus_status(musb)) {
+				usb_gadget_vbus_connect(&musb->g);
+			}
+/* LGE_CHANGE_E kenneth.kang@lge.com 2011-01-16 USB patch */			
 		}
 
 		spin_lock_irqsave(&musb->lock, flags);

@@ -475,7 +475,9 @@ void musb_context_save_restore(enum musb_state state)
 	}
 
 	if (drv) {
-#ifdef CONFIG_PM_RUNTIME
+// 20110325 prime@sdcmicro.com Temporarily blocked PM_RUNTIME feature until PM suspend issues are resolved [START]
+//#ifdef CONFIG_PM_RUNTIME
+#if 0
 		struct musb_hdrc_platform_data *pdata = dev->platform_data;
 		const struct dev_pm_ops *pm = drv->pm;
 
@@ -507,7 +509,7 @@ void musb_context_save_restore(enum musb_state state)
 					clk_disable(clk48m);
 				}
 				/* Enable ENABLEFORCE bit*/
-				__raw_writel(0x1, base + 0x414);
+				__raw_writel(0x0, base + 0x414);
 				pdata->device_idle(pdev);
 				break;
 
@@ -545,6 +547,7 @@ void musb_context_save_restore(enum musb_state state)
 				}
 			}
 #endif
+// 20110325 prime@sdcmicro.com Temporarily blocked PM_RUNTIME feature until PM suspend issues are resolved [END]
 
 	}
 	iounmap(base);
