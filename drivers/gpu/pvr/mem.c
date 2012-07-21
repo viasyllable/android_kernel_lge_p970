@@ -29,7 +29,7 @@
 
 
 static PVRSRV_ERROR
-FreeSharedSysMemCallBack(IMG_PVOID	pvParam,
+FreeSharedSysMemCallBack(IMG_PVOID  pvParam,
 						 IMG_UINT32 ui32Param,
 						 IMG_BOOL   bDummy)
 {
@@ -80,6 +80,8 @@ PVRSRVAllocSharedSysMemoryKM(PVRSRV_PER_PROCESS_DATA	*psPerProc,
 	if(OSAllocPages(psKernelMemInfo->ui32Flags,
 					psKernelMemInfo->uAllocSize,
 					(IMG_UINT32)HOST_PAGESIZE(),
+					IMG_NULL,
+					0,
 					&psKernelMemInfo->pvLinAddrKM,
 					&psKernelMemInfo->sMemBlk.hOSMemHandle)
 		!= PVRSRV_OK)

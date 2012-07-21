@@ -31,7 +31,7 @@ typedef struct tagIOCTL_PACKAGE
 {
 	IMG_UINT32 ui32Cmd;
 	IMG_UINT32 ui32Size;
-	IMG_VOID	*pInBuffer;
+	IMG_VOID 	*pInBuffer;
 	IMG_UINT32  ui32InBufferSize;
 	IMG_VOID    *pOutBuffer;
 	IMG_UINT32  ui32OutBufferSize;

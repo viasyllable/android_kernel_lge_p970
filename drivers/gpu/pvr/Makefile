@@ -17,7 +17,7 @@ ccflags-y = -DLINUX -D__linux__ -Idrivers/gpu/pvr \
 	-DSUPPORT_SGX_HWPERF \
 	-DSUPPORT_MEMINFO_IDS \
 	-DDISPLAY_CONTROLLER=omaplfb \
-	-DSYS_SGX_ACTIVE_POWER_LATENCY_MS=2 \
+	-DSYS_SGX_ACTIVE_POWER_LATENCY_MS=100 \
 	-DPVR_BUILD_DATE="" \
 	-DSUPPORT_SGX \
 	-DCLIENT_DRIVER_DEFAULT_WAIT_RETRIES=50 \
@@ -29,6 +29,8 @@ ccflags-y = -DLINUX -D__linux__ -Idrivers/gpu/pvr \
 	-DSGX_EARLYSUSPEND \
 	-DPVR_NO_OMAP_TIMER \
 	-DSUPPORT_SGX_LOW_LATENCY_SCHEDULING \
+	-DPVR_LDM_DRIVER_REGISTRATION_NAME="\"pvrsrvkm\"" \
+	-DSUPPORT_PVRSRV_GET_DC_SYSTEM_BUFFER \
 	-DPVRSRV_MODNAME="\"pvrsrvkm"\"
 
 ccflags-$(CONFIG_SGX540) +=  -Idrivers/gpu/pvr/omap4  -Idrivers/gpu/pvr/sgx \
@@ -48,7 +50,6 @@ ccflags-$(CONFIG_SGX_530_BUILD_RELEASE) += \
 	-DPVR_BUILD_TYPE="\"release\"" \
 	-DRELEASE \
 	-DSUPPORT_ACTIVE_POWER_MANAGEMENT \
-	-DSYS_OMAP3430_PIN_MEMORY_BUS_CLOCK \
 	-DSUPPORT_HW_RECOVERY
 
 ccflags-$(CONFIG_SGX_530_BUILD_DEBUG) += \
@@ -65,8 +66,7 @@ ccflags-$(CONFIG_SGX_540_BUILD_RELEASE) += \
 	-DPVR_BUILD_TYPE="\"release\"" \
 	-DRELEASE \
 	-DSUPPORT_ACTIVE_POWER_MANAGEMENT \
-	-DSUPPORT_HW_RECOVERY \
-	-DPVR_NO_FULL_CACHE_OPS
+	-DSUPPORT_HW_RECOVERY
 
 ccflags-$(CONFIG_SGX_540_BUILD_DEBUG) += \
 	-DPVR_BUILD_TYPE="\"debug\""  -DDEBUG \
@@ -77,11 +77,10 @@ ccflags-$(CONFIG_SGX_540_BUILD_DEBUG) += \
 	-DPVRSRV_USSE_EDM_STATUS_DEBUG \
 	-DPVRSRV_DUMP_MK_TRACE \
 	-DSUPPORT_ACTIVE_POWER_MANAGEMENT \
-	-DPVR_NO_FULL_CACHE_OPS \
 	-DSUPPORT_HW_RECOVERY \
 	-DDEBUG_LOG_PATH_TRUNCATE="\"eurasia_km\""
 
-ccflags-$(CONFIG_SGX_PDUMP) += -Idrivers/gpu/pvr/pdump \
+ccflags-$(CONFIG_SGX_PDUMP) += -Idrivers/gpu/pvr/dbgdrv \
 	-DPDUMP \
 	-DSUPPORT_DBGDRV_EVENT_OBJECTS
 
@@ -137,6 +136,8 @@ sgx-y :=  \
 	sgx/mmu.o \
 	sgx/pb.o
 
+pvr530-$(CONFIG_ION_OMAP) += ion.o
+
 sgx_displayclass-y := \
 	display/omap_sgx_displayclass.o \
 	display/omap_display.o
@@ -147,12 +148,12 @@ omaplfb-y := \
 	omaplfb/omaplfb_linux.o
 
 dbgdrv-$(CONFIG_SGX_PDUMP) := \
-	pdump/main.o \
-	pdump/dbgdriv.o \
-	pdump/ioctl.o \
-	pdump/handle.o \
-	pdump/hostfunc.o \
-	pdump/hotkey.o
+	dbgdrv/main.o \
+	dbgdrv/dbgdriv.o \
+	dbgdrv/ioctl.o \
+	dbgdrv/handle.o \
+	dbgdrv/hostfunc.o \
+	dbgdrv/hotkey.o
 
 obj-$(CONFIG_SGX540) := pvr_common.o sgx.o omaplfb.o pvr540.o
 obj-$(CONFIG_SGX530) := pvr_common.o sgx.o omaplfb.o pvr530.o

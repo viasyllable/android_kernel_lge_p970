@@ -194,7 +194,7 @@ static IMG_UINT32 DBGDIOCDrivWrite2(IMG_VOID * pvInBuffer, IMG_VOID * pvOutBuffe
 {
 	IMG_UINT32 *	pui32BytesCopied;
 	PDBG_IN_WRITE	psInParams;
-	PDBG_STREAM	psStream;
+	PDBG_STREAM 	psStream;
 
 	psInParams = (PDBG_IN_WRITE) pvInBuffer;
 	pui32BytesCopied = (IMG_UINT32 *) pvOutBuffer;

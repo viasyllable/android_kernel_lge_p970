@@ -240,6 +240,7 @@ long dbgdrv_ioctl(struct file *file, unsigned int ioctlCmd, unsigned long arg)
 		goto init_failed;
 	}
 
+
 	cmd = MAKEIOCTLINDEX(pIP->ui32Cmd) - DEBUG_SERVICE_IOCTL_BASE - 1;
 
 	if(pIP->ui32Cmd == DEBUG_SERVICE_READ)
