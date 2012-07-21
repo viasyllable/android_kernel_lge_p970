@@ -1400,7 +1400,7 @@ static void enable_board_wakeup_source(void)
 {
 	/* T2 interrupt line (keypad) */
 	omap_mux_init_signal("sys_nirq",
-		OMAP_WAKEUP_EN | OMAP_PIN_INPUT_PULLUP | OMAP_PIN_OFF_INPUT_PULLUP);
+		OMAP_WAKEUP_EN | OMAP_PIN_INPUT_PULLUP);
 }
 
 void __init hub_peripherals_init(void)
