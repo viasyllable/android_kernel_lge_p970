@@ -555,7 +555,7 @@ static struct regulator_init_data hub_vmmc2 = {
 /* VSIM for 1.8V_WLAN */
 static struct regulator_init_data hub_vsim = {
 	.constraints = {
-		.min_uV			= 170000,
+		.min_uV			= 1700000,
 		.max_uV			= 2700000,
 		.valid_modes_mask	= REGULATOR_MODE_NORMAL
 					| REGULATOR_MODE_STANDBY,
