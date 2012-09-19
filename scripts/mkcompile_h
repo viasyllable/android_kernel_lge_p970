@@ -64,8 +64,8 @@ UTS_TRUNCATE="cut -b -$UTS_LEN"
   echo \#define UTS_VERSION \"`echo $UTS_VERSION | $UTS_TRUNCATE`\"
 
   echo \#define LINUX_COMPILE_TIME \"`date +%T`\"
-  echo \#define LINUX_COMPILE_BY \"ShenDu\"
-  echo \#define LINUX_COMPILE_HOST \"ShenDuOS\"
+  echo \#define LINUX_COMPILE_BY \"android\"
+  echo \#define LINUX_COMPILE_HOST \"localhost\"
 
   domain=`dnsdomainname 2> /dev/null`
   if [ -z "$domain" ]; then
