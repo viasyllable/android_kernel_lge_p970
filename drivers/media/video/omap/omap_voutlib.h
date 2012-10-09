@@ -18,8 +18,7 @@ extern void omap_vout_default_crop(struct v4l2_pix_format *pix,
 extern int omap_vout_new_crop(struct v4l2_pix_format *pix,
 		struct v4l2_rect *crop, struct v4l2_window *win,
 		struct v4l2_framebuffer *fbuf,
-		const struct v4l2_rect *new_crop,
-		int *use_isp_rsz_for_downscale);
+		const struct v4l2_rect *new_crop);
 
 extern int omap_vout_try_window(struct v4l2_framebuffer *fbuf,
 		struct v4l2_window *new_win);

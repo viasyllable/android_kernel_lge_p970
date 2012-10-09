@@ -54,6 +54,14 @@ static void pwrbutton_wq_func(struct work_struct *work)
 
 	err = twl_i2c_read_u8(TWL4030_MODULE_PM_MASTER, &value, STS_HW_CONDITIONS);
 	if (!err)  {
+
+		if((value & PWR_PWRON_IRQ) == 0)
+			printk("[PWR_BUTTON Release]\n");
+		else if((value & PWR_PWRON_IRQ) == 1)
+			printk("[PWR_BUTTON Press]\n");
+		else
+			printk("[PWR_BUTTON]\n");
+
 		input_report_key(pwr, KEY_POWER, value & PWR_PWRON_IRQ);
 		input_sync(pwr);
 	}
@@ -83,11 +91,11 @@ static irqreturn_t powerbutton_irq(int irq, void *_pwr)
 	if (!err) {
 		input_report_key(pwr, KEY_POWER, value & PWR_PWRON_IRQ);
 		input_sync(pwr);
-        }
+	} 
 	else {
 		dev_err(pwr->dev.parent, "twl4030: i2c error %d while reading"
 			" TWL4030 PM_MASTER STS_HW_CONDITIONS register\n", err);
-    }
+	}
 
 	return IRQ_HANDLED;
 }

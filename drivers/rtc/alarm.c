@@ -97,7 +97,7 @@ static void update_timer_locked(struct alarm_queue *base, bool head_removed)
 	}
 
 	hrtimer_try_to_cancel(&base->timer);
-	base->timer._expires = ktime_add(base->delta, alarm->expires);
+	base->timer.node.expires = ktime_add(base->delta, alarm->expires);
 	base->timer._softexpires = ktime_add(base->delta, alarm->softexpires);
 	hrtimer_start_expires(&base->timer, HRTIMER_MODE_ABS);
 }
@@ -436,6 +436,9 @@ static int alarm_suspend(struct platform_device *pdev, pm_message_t state)
 			err = -EBUSY;
 			spin_unlock_irqrestore(&alarm_slock, flags);
 		}
+		else
+			printk(KERN_WARNING "rtc alarm set at %ld, now %ld,(+%ld sec)\n",
+					 rtc_alarm_time, rtc_current_time, (rtc_alarm_time - rtc_current_time));
 	}
 	return err;
 }

@@ -22,16 +22,17 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/bitops.h>
+#include <trace/events/power.h>
 
+#include <asm/cpu.h>
 #include <plat/clock.h>
-#include <plat/clockdomain.h>
+#include "clockdomain.h"
 #include <plat/cpu.h>
 #include <plat/prcm.h>
 
 #include "clock.h"
-#include "prm.h"
-#include "prm-regbits-24xx.h"
-#include "cm.h"
+#include "cm2xxx_3xxx.h"
+#include "cm44xx.h"
 #include "cm-regbits-24xx.h"
 #include "cm-regbits-34xx.h"
 
@@ -278,10 +279,13 @@ void omap2_clk_disable(struct clk *clk)
 
 	pr_debug("clock: %s: disabling in hardware\n", clk->name);
 
-	clk->ops->disable(clk);
+	if (clk->ops && clk->ops->disable) {
+		trace_clock_disable(clk->name, 0, smp_processor_id());
+		clk->ops->disable(clk);
+	}
 
 	if (clk->clkdm)
-		omap2_clkdm_clk_disable(clk->clkdm, clk);
+		clkdm_clk_disable(clk->clkdm, clk);
 
 	if (clk->parent)
 		omap2_clk_disable(clk->parent);
@@ -321,7 +325,7 @@ int omap2_clk_enable(struct clk *clk)
 	}
 
 	if (clk->clkdm) {
-		ret = omap2_clkdm_clk_enable(clk->clkdm, clk);
+		ret = clkdm_clk_enable(clk->clkdm, clk);
 		if (ret) {
 			WARN(1, "clock: %s: could not enable clockdomain %s: "
 			     "%d\n", clk->name, clk->clkdm->name, ret);
@@ -329,26 +333,25 @@ int omap2_clk_enable(struct clk *clk)
 		}
 	}
 
-	ret = clk->ops->enable(clk);
-	if (ret) {
-		WARN(1, "clock: %s: could not enable: %d\n", clk->name, ret);
-		goto oce_err3;
-	}
-
-	if (clk->clkdm) {
-		ret = omap2_clkdm_clk_enable_post(clk->clkdm, clk);
+	if (clk->ops && clk->ops->enable) {
+		trace_clock_enable(clk->name, 1, smp_processor_id());
+		ret = clk->ops->enable(clk);
 		if (ret) {
-			WARN(1, "clock: %s: could not enable clockdomain %s: "
-				"%d\n", clk->name, clk->clkdm->name, ret);
-			goto oce_err2;
+			WARN(1, "clock: %s: could not enable: %d\n",
+			     clk->name, ret);
+			goto oce_err3;
 		}
 	}
+
+	/* If clockdomain supports hardware control, enable it */
+	if (clk->clkdm)
+		clkdm_allow_idle(clk->clkdm);
 
 	return 0;
 
 oce_err3:
 	if (clk->clkdm)
-		omap2_clkdm_clk_disable(clk->clkdm, clk);
+		clkdm_clk_disable(clk->clkdm, clk);
 oce_err2:
 	if (clk->parent)
 		omap2_clk_disable(clk->parent);
@@ -367,6 +370,29 @@ long omap2_clk_round_rate(struct clk *clk, unsigned long rate)
 	return clk->rate;
 }
 
+/* given a clock and its new parent, predict the new rate for clock */
+long omap2_clk_round_rate_parent(struct clk *clk, struct clk *new_parent)
+{
+	u32 field_val;
+	u8 parent_div;
+	long rate;
+
+	if (!clk->clksel || !new_parent)
+		return -EINVAL;
+
+	/*parent_div = _omap2_clksel_get_src_field(new_parent, clk, &field_val);*/
+	parent_div = _get_div_and_fieldval(new_parent, clk, &field_val);
+	if (!parent_div)
+		return -EINVAL;
+
+	/* CLKSEL clocks follow their parents' rates, divided by a divisor */
+	rate = new_parent->rate;
+	if (parent_div > 0)
+		rate /= parent_div;
+
+	return rate;
+}
+
 /* Set the clock rate for a clock source */
 int omap2_clk_set_rate(struct clk *clk, unsigned long rate)
 {
@@ -375,8 +401,10 @@ int omap2_clk_set_rate(struct clk *clk, unsigned long rate)
 	pr_debug("clock: set_rate for clock %s to rate %ld\n", clk->name, rate);
 
 	/* dpll_ck, core_ck, virt_prcm_set; plus all clksel clocks */
-	if (clk->set_rate)
+	if (clk->set_rate) {
+		trace_clock_set_rate(clk->name, rate, smp_processor_id());
 		ret = clk->set_rate(clk, rate);
+	}
 
 	return ret;
 }
@@ -399,10 +427,16 @@ int omap2_clk_set_parent(struct clk *clk, struct clk *new_parent)
 const struct clkops clkops_omap3_noncore_dpll_ops = {
 	.enable		= omap3_noncore_dpll_enable,
 	.disable	= omap3_noncore_dpll_disable,
+	.allow_idle	= omap3_dpll_allow_idle,
+	.deny_idle	= omap3_dpll_deny_idle,
+};
+
+const struct clkops clkops_omap3_core_dpll_ops = {
+	.allow_idle	= omap3_dpll_allow_idle,
+	.deny_idle	= omap3_dpll_deny_idle,
 };
 
 #endif
-
 
 /*
  * OMAP2+ clock reset and init functions
@@ -419,7 +453,7 @@ void omap2_clk_disable_unused(struct clk *clk)
 	if ((regval32 & (1 << clk->enable_bit)) == v)
 		return;
 
-	printk(KERN_DEBUG "Disabling unused clock \"%s\"\n", clk->name);
+	pr_debug("Disabling unused clock \"%s\"\n", clk->name);
 	if (cpu_is_omap34xx()) {
 		omap2_clk_enable(clk);
 		omap2_clk_disable(clk);
@@ -520,6 +554,7 @@ struct clk_functions omap2_clk_functions = {
 	.clk_enable		= omap2_clk_enable,
 	.clk_disable		= omap2_clk_disable,
 	.clk_round_rate		= omap2_clk_round_rate,
+	.clk_round_rate_parent	= omap2_clk_round_rate_parent,
 	.clk_set_rate		= omap2_clk_set_rate,
 	.clk_set_parent		= omap2_clk_set_parent,
 	.clk_disable_unused	= omap2_clk_disable_unused,

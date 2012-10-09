@@ -87,7 +87,7 @@ typedef struct spinlock {
  * Please use DEFINE_SPINLOCK() or __SPIN_LOCK_UNLOCKED() as
  * appropriate.
  */
-#define SPIN_LOCK_UNLOCKED	__SPIN_LOCK_UNLOCKED(old_style_spin_init)
+#define SPIN_LOCK_UNLOCKED	__SPIN_LOCK_UNLOCKED(old_style_spin_init)	// 20120207 jisil.park@lge.com
 
 #define DEFINE_SPINLOCK(x)	spinlock_t x = __SPIN_LOCK_UNLOCKED(x)
 

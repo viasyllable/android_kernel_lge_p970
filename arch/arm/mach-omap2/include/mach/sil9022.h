@@ -20,16 +20,13 @@
 #define CM_CLKOUT_CTRL			0x48004D70
 
 #define HDMI_XRES			1280
-/*#define HDMI_XRES			1920*/
 #define HDMI_YRES			720
-/*#define HDMI_YRES			1080*/
 #define HDMI_PIXCLOCK_MAX		74250
 #define VERTICAL_FREQ			0x3C
 
 #define I2C_M_WR			0
 
-#define SI9022_USERST_PIN		1	/*Uncomment this if RST pin
-						is to be used*/
+#define SI9022_USERST_PIN		1
 
 #define SI9022_REG_PIX_CLK_LSB		0x00
 #define SI9022_REG_PIX_CLK_MSB		0x01
@@ -85,25 +82,25 @@
 
 #define SI9022_RESETPADNUM		HALGPIO_GPIO6
 
-#define SI9022_EDID_DETAILED_TIMING_OFFSET  0x36 /*EDID Detailed Timing
+#define SI9022_EDID_DETAILED_TIMING_OFFSET	0x36 /*EDID Detailed Timing
 							Info 0 begin offset*/
-#define SI9022_EDID_PIX_CLK_OFFSET          0
-#define SI9022_EDID_H_ACTIVE_OFFSET         2
-#define SI9022_EDID_H_BLANKING_OFFSET       3
-#define SI9022_EDID_V_ACTIVE_OFFSET         5
-#define SI9022_EDID_V_BLANKING_OFFSET       6
-#define SI9022_EDID_H_SYNC_OFFSET           8
-#define SI9022_EDID_H_SYNC_PW_OFFSET        9
-#define SI9022_EDID_V_SYNC_OFFSET           10
-#define SI9022_EDID_V_SYNC_PW_OFFSET        10
-#define SI9022_EDID_H_IMAGE_SIZE_OFFSET     12
-#define SI9022_EDID_V_IMAGE_SIZE_OFFSET     13
-#define SI9022_EDID_H_BORDER_OFFSET         15
-#define SI9022_EDID_V_BORDER_OFFSET         16
-#define SI9022_EDID_FLAGS_OFFSET            17
+#define SI9022_EDID_PIX_CLK_OFFSET		0
+#define SI9022_EDID_H_ACTIVE_OFFSET		2
+#define SI9022_EDID_H_BLANKING_OFFSET		3
+#define SI9022_EDID_V_ACTIVE_OFFSET		5
+#define SI9022_EDID_V_BLANKING_OFFSET		6
+#define SI9022_EDID_H_SYNC_OFFSET		8
+#define SI9022_EDID_H_SYNC_PW_OFFSET		9
+#define SI9022_EDID_V_SYNC_OFFSET		10
+#define SI9022_EDID_V_SYNC_PW_OFFSET		10
+#define SI9022_EDID_H_IMAGE_SIZE_OFFSET		12
+#define SI9022_EDID_V_IMAGE_SIZE_OFFSET		13
+#define SI9022_EDID_H_BORDER_OFFSET		15
+#define SI9022_EDID_V_BORDER_OFFSET		16
+#define SI9022_EDID_FLAGS_OFFSET		17
 
-#define SI9022_PLUG_DETECTED                0xF0
-#define SI9022_UNPLUG_DETECTED              0xF1
+#define SI9022_PLUG_DETECTED			0xF0
+#define SI9022_UNPLUG_DETECTED			0xF1
 
 
 /* ---------------------------------------------------------------------  */
@@ -114,16 +111,16 @@
 #define EDID_SIZE_BLOCK1_TIMING_DESCRIPTOR	4
 
 /* HDMI Connected States  */
-#define HDMI_STATE_NOMONITOR    0       /* No HDMI monitor connected*/
-#define HDMI_STATE_CONNECTED    1  /* HDMI monitor connected but powered off*/
-#define HDMI_STATE_ON           2  /* HDMI monitor connected and powered on*/
+#define HDMI_STATE_NOMONITOR	0       /* No HDMI monitor connected*/
+#define HDMI_STATE_CONNECTED	1  /* HDMI monitor connected but powered off*/
+#define HDMI_STATE_ON		2  /* HDMI monitor connected and powered on*/
 
 
 /* HDMI EDID Length  */
-#define HDMI_EDID_MAX_LENGTH    256
+#define HDMI_EDID_MAX_LENGTH	256
 
 /* HDMI EDID DTDs  */
-#define HDMI_EDID_MAX_DTDS      4
+#define HDMI_EDID_MAX_DTDS	4
 
 /* HDMI EDID DTD Tags  */
 #define HDMI_EDID_DTD_TAG_MONITOR_NAME              0xFC
@@ -622,33 +619,33 @@ struct HDMI_EDID_DTD_VIDEO {
 
 /*  Monitor Limits Descriptor Block  */
 struct HDMI_EDID_DTD_MONITOR {
-	u8   pixel_clock[2];          /* 54-55*/
-	u8   _reserved1;              /* 56 */
-	u8   block_type;              /* 57 */
-	u8   _reserved2;              /* 58 */
-	u8   min_vert_freq;           /* 59 */
-	u8   max_vert_freq;           /* 60 */
-	u8   min_horiz_freq;          /* 61 */
-	u8   max_horiz_freq;          /* 62 */
-	u8   pixel_clock_mhz;         /* 63 */
+	u8	pixel_clock[2];			/* 54-55*/
+	u8	_reserved1;			/* 56 */
+	u8	block_type;			/* 57 */
+	u8	_reserved2;			/* 58 */
+	u8	min_vert_freq;			/* 59 */
+	u8	max_vert_freq;			/* 60 */
+	u8	min_horiz_freq;			/* 61 */
+	u8	max_horiz_freq;			/* 62 */
+	u8	pixel_clock_mhz;		/* 63 */
 
-	u8   GTF[2];                  /* 64 -65 */
-	u8   start_horiz_freq;        /* 66  */
-	u8   C;	                      /* 67 */
-	u8   M[2];                    /* 68-69 */
-	u8   K;                       /* 70 */
-	u8   J;                       /* 71 */
+	u8	GTF[2];				/* 64 -65 */
+	u8	start_horiz_freq;		/* 66  */
+	u8	C;				/* 67 */
+	u8	M[2];				/* 68-69 */
+	u8	K;				/* 70 */
+	u8	J;				/* 71 */
 };
 
 
 /*  Text Descriptor Block  */
 struct HDMI_EDID_DTD_TEXT {
-	u8   pixel_clock[2];          /* 54-55 */
-	u8   _reserved1;              /* 56 */
-	u8   block_type;              /* 57 */
-	u8   _reserved2;              /* 58 */
+	u8   pixel_clock[2];		/* 54-55 */
+	u8   _reserved1;		/* 56 */
+	u8   block_type;		/* 57 */
+	u8   _reserved2;		/* 58 */
 
-	u8   text[13];                /* 59-71 */
+	u8   text[13];			/* 59-71 */
 };
 
 
@@ -663,38 +660,38 @@ union HDMI_EDID_DTD {
 
 /*  EDID struct  */
 struct HDMI_EDID {
-	u8   header[8];              /* 00-07 */
-	u8   manufacturerID[2];      /* 08-09 */
-	u8   product_id[2];          /* 10-11 */
-	u8   serial_number[4];       /* 12-15 */
-	u8   week_manufactured;      /* 16 */
-	u8   year_manufactured;      /* 17 */
-	u8   edid_version;           /* 18 */
-	u8   edid_revision;          /* 19 */
+	u8   header[8];			/* 00-07 */
+	u8   manufacturerID[2];		/* 08-09 */
+	u8   product_id[2];		/* 10-11 */
+	u8   serial_number[4];		/* 12-15 */
+	u8   week_manufactured;		/* 16 */
+	u8   year_manufactured;		/* 17 */
+	u8   edid_version;		/* 18 */
+	u8   edid_revision;		/* 19 */
 
-	u8   video_in_definition;    /* 20 */
-	u8   max_horiz_image_size;   /* 21 */
-	u8   max_vert_image_size;    /* 22 */
-	u8   display_gamma;          /* 23 */
-	u8   power_features;         /* 24 */
-	u8   chroma_info[10];        /* 25-34 */
-	u8   timing_1;               /* 35 */
-	u8   timing_2;               /* 36 */
-	u8   timing_3;               /* 37 */
-	u8   std_timings[16];        /* 38-53 */
+	u8   video_in_definition;	/* 20 */
+	u8   max_horiz_image_size;	/* 21 */
+	u8   max_vert_image_size;	/* 22 */
+	u8   display_gamma;		/* 23 */
+	u8   power_features;		/* 24 */
+	u8   chroma_info[10];		/* 25-34 */
+	u8   timing_1;			/* 35 */
+	u8   timing_2;			/* 36 */
+	u8   timing_3;			/* 37 */
+	u8   std_timings[16];		/* 38-53 */
 
-	union HDMI_EDID_DTD   DTD[4];         /* 72-125 */
+	union HDMI_EDID_DTD   DTD[4];	/* 72-125 */
 
-	u8   extension_edid;         /* 126 */
-	u8   checksum;               /* 127 */
+	u8   extension_edid;		/* 126 */
+	u8   checksum;			/* 127 */
 
-	u8   extension_tag;          /* 00 (extensions follow EDID) */
-	u8   extention_rev;          /* 01 */
-	u8   offset_dtd;             /* 02 */
-	u8   num_dtd;                /* 03 */
+	u8   extension_tag;		/* 00 (extensions follow EDID) */
+	u8   extention_rev;		/* 01 */
+	u8   offset_dtd;		/* 02 */
+	u8   num_dtd;			/* 03 */
 
-	u8   data_block[123];        /* 04 - 126 */
-	u8   extension_checksum;     /* 127 */
+	u8   data_block[123];		/* 04 - 126 */
+	u8   extension_checksum;	/* 127 */
 };
 
 struct hdmi_reg_data {

@@ -14,6 +14,8 @@
 #define HUB_WIFI_PMENA_GPIO	23
 #define HUB_WIFI_IRQ_GPIO	24
 
+/* LGE_CHANGE_S, [younggil.lee@lge.com], 2011-05-04, <add Setting enable Wifi Host wakeup> */
 void config_wlan_mux(void);
+/* LGE_CHANGE_E, [younggil.lee@lge.com], 2011-05-04, <add Setting enable Wifi Host wakeup> */
 
 #endif /* _BOARD_ZOOM2_WIFI_H */

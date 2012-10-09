@@ -214,7 +214,6 @@ struct twl4030_bci_device_info {
 	int			previous_battery_present;
 	int			previous_charge_rsoc;
 	int			pre_pre_charge_rsoc;
-	
 	struct power_supply	ac;
 	struct power_supply	usb;
 #endif
@@ -223,7 +222,7 @@ struct twl4030_bci_device_info {
 	struct notifier_block	nb;
 	struct power_supply	bat;
 	struct power_supply	bk_bat;
-	struct power_supply     usb_bat;
+	struct power_supply usb_bat;
 	struct delayed_work	twl4030_bci_monitor_work;
 	struct delayed_work	twl4030_bk_bci_monitor_work;
 };
@@ -235,7 +234,7 @@ struct twl4030_bci_device_info {
 #define TEMP_CRITICAL_LOWER	(-300)
 #define TEMP_LIMIT_UPPER	(600)
 #define TEMP_LIMIT_LOWER	(-200)
-#define MONITOR_WORK_TIME			(10 * HZ)
+#define MONITOR_WORK_TIME	(10 * HZ)
 
 extern u32 wakeup_timer_seconds;	// from pm34xx.c
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -292,14 +291,14 @@ static void set_charging_timer(int en)
 		if(!charging_monitor_started) {
 			printk(KERN_DEBUG "[Battery] Charging Timer Enabled\n");
 			charging_monitor_started = 1;
-				do_gettimeofday(&charging_monitor_start_time);
-			}
-		} else {
+			do_gettimeofday(&charging_monitor_start_time);
+		}
+	} else {
 		if(charging_monitor_started) {
 			printk(KERN_DEBUG "[Battery] Charging Timer Disabled\n");
 			charging_monitor_started = 0;
-			}
 		}
+	}
 }
 int charging_timeout(void)
 {
@@ -333,9 +332,9 @@ int check_battery_present(void)
 	if(refer_di == NULL)
 		return 0;
 		
-	if(refer_di->temp_C == 0xBA00E00)
-		return 0;
-	return 1;
+    if(refer_di->temp_C == 0xBA00E00)
+    	return 0;
+    return 1;
 }
 EXPORT_SYMBOL(check_battery_present);
 
@@ -876,7 +875,7 @@ static int adc2temperature(int adc)
 	}
 	tmp = grad * adc + inter;
 	tmp /= TEMP_MULTIPLEX;
-
+	
 	return tmp;
 	#undef TEMP_MULTIPLEX
 }
@@ -908,7 +907,7 @@ static int twl4030battery_temperature(void)
         temp = 200;
     }
     //20101109 taehwan.kim@lge.com Defence code when TWL4030_madc read fail [END_LGE]
-    
+
 #if 0
 	// VBUS Voltage Check ( ADCIN8 )
 	req.channels = (1 << 8);
@@ -1195,7 +1194,7 @@ static int read_bci_val(u8 reg)
     ret = clear_n_set(TWL4030_MODULE_MAIN_CHARGE, 0, USBFASTMCHG, REG_BCIMFSTS4);
 #endif //CONFIG_MACH_LGE_HUB
 // 20100816 taehwan.kim@lge.com Set TWL4030 register for MADC voltage check [END_LGE]
-	
+
 	/* reading MSB */
 	ret = twl_i2c_read_u8(TWL4030_MODULE_MAIN_CHARGE, &val,
 		reg + 1);
@@ -1338,13 +1337,6 @@ static void twl4030_bci_battery_read_status(struct twl4030_bci_device_info *di)
 	/* Read Battery Status */
 	di->temp_C = twl4030battery_temperature();		// Read Temperature
 	di->battery_present = check_battery_present();		// Set Battery Present
-	if (di->temp_C >600)
-	{
-        msleep(500);
-        printk("[BATTERY] When suddenly OverTemp. temp_C : %d \n", di->temp_C);
-        di->temp_C = twl4030battery_temperature();
-        printk("[BATTERY] When suddenly OverTemp. retry temp_C : %d \n", di->temp_C);
-    }
 #ifdef FUELGAUGE_AP_ONLY
 	if(di->battery_present) {			// Adjust RCOMP for fuelgauge(Rev.D)
 #else
@@ -1360,13 +1352,6 @@ static void twl4030_bci_battery_read_status(struct twl4030_bci_device_info *di)
 	di->current_uA = 0;
 #else
 	di->temp_C = twl4030battery_temperature();
-	if (di->temp_C >600)
-	{
-        msleep(500);
-        printk("[BATTERY2] When suddenly OverTemp. temp_C : %d \n", di->temp_C);
-        di->temp_C = twl4030battery_temperature();
-        printk("[BATTERY2] When suddenly OverTemp. retry temp_C : %d \n", di->temp_C);
-    }	
 	di->voltage_uV = twl4030battery_voltage();
 	di->current_uA = twl4030battery_current();
 	di->capacity = twl4030battery_capacity(di);
@@ -1448,7 +1433,7 @@ static void set_battery_status(struct twl4030_bci_device_info *di)
 #else
 #error
 #endif 
-	
+
 	switch( di->charge_rsoc ) {
 		case POWER_SUPPLY_TYPE_UPS:
 			wakeup_timer_seconds = 0;	// disable wakeup.
@@ -1465,28 +1450,28 @@ static void set_battery_status(struct twl4030_bci_device_info *di)
 			if(di->battery_capacity <= 1)	// enable wakeup for monitoring power-off voltage
 				wakeup_timer_seconds = 60;
 			break;
-			}
-
+	}
+	
 	// Set Charging Status
 	if(di->charge_rsoc == POWER_SUPPLY_TYPE_UPS ||		// JIG
 	   di->charge_rsoc == POWER_SUPPLY_TYPE_BATTERY) {	// Battery
 		di->charge_status = POWER_SUPPLY_STATUS_DISCHARGING;
-		} else {
+	} else {
 		if(di->battery_present == 0) {			// Battery not present. Display as not charging
-				di->charge_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
+			di->charge_status = POWER_SUPPLY_STATUS_NOT_CHARGING;		
 		} else if(di->temp_C < TEMP_CRITICAL_LOWER ||
 			  di->temp_C > TEMP_CRITICAL_UPPER) {	// Charging Stoped
-				di->charge_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
+			di->charge_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		} else if(di->temp_C < TEMP_LIMIT_LOWER ||
 			  di->temp_C > TEMP_LIMIT_UPPER) {	// Charging Limited
-				di->charge_status = POWER_SUPPLY_STATUS_CHARGING;
+			di->charge_status = POWER_SUPPLY_STATUS_CHARGING;
 		} else if((start_monitor || end_of_charge) &&
 			  di->battery_capacity > 97) {		// Charging FULL
-				di->charge_status = POWER_SUPPLY_STATUS_FULL;
+			di->charge_status = POWER_SUPPLY_STATUS_FULL;
 		} else {					// Normal Charging
-				di->charge_status = POWER_SUPPLY_STATUS_CHARGING;
-			}
+			di->charge_status = POWER_SUPPLY_STATUS_CHARGING;
 		}
+	}
 }
 
 static int check_battery_changed(struct twl4030_bci_device_info *di)
@@ -1579,37 +1564,37 @@ static int set_battery_charging(struct twl4030_bci_device_info *di)
 	 *  - Normal : up to 4.2V
 	 */
 	// Set maximum charging voltage
-		if(di->temp_C < TEMP_CRITICAL_LOWER ||
+	if(di->temp_C < TEMP_CRITICAL_LOWER ||
 	   di->temp_C > TEMP_CRITICAL_UPPER) {		// Critical Temperature! Must stop charging
+		start_monitor = 0;
+		set_end_of_charge(0);
+		set_charging_timer(0);
+		if (di->battery_present == 1) {
+			printk(KERN_INFO "[charging_msg] %s: Temprature Critical Charger Off %d\n", __func__, di->temp_C);
+#ifdef CONFIG_LGE_CHARGE_CONTROL_BATTERY_FET
+			lge_battery_fet_onoff(0);
+#else 
+			charging_ic_deactive();
+#endif 
+		}
+		return 0;
+	} else if(di->temp_C < TEMP_LIMIT_LOWER ||
+		  di->temp_C > TEMP_LIMIT_UPPER) {	// Charging Limit
+		trickle_chg_max = TRICKLE_LIMMIT_ALERT_CHG_MAX;
+		trickle_chg_timer_start = TRICKLE_LIMMIT_ALERT_CHG_TIMER_START;
+		trickle_chg_min = TRICKLE_LIMMIT_ALERT_CHG_MIN;
+	} else {									// Normal Charging
+		trickle_chg_max = TRICKLE_CHG_MAX;					// to unintentional charging stop
+		trickle_chg_timer_start = TRICKLE_CHG_TIMER_START;
+		trickle_chg_min = TRICKLE_CHG_MIN;
+		if(di->previous_temp_C < TEMP_LIMIT_LOWER ||
+		   di->previous_temp_C > TEMP_LIMIT_UPPER) {
 			start_monitor = 0;
 			set_end_of_charge(0);
 			set_charging_timer(0);
-			if (di->battery_present == 1) {
-			printk(KERN_INFO "[charging_msg] %s: Temprature Critical Charger Off %d\n", __func__, di->temp_C);
-#ifdef CONFIG_LGE_CHARGE_CONTROL_BATTERY_FET
-				lge_battery_fet_onoff(0);
-#else 
-				charging_ic_deactive();
-#endif 
-			}
-			return 0;
-		} else if(di->temp_C < TEMP_LIMIT_LOWER ||
-		  di->temp_C > TEMP_LIMIT_UPPER) {	// Charging Limit
-			trickle_chg_max = TRICKLE_LIMMIT_ALERT_CHG_MAX;
-			trickle_chg_timer_start = TRICKLE_LIMMIT_ALERT_CHG_TIMER_START;
-			trickle_chg_min = TRICKLE_LIMMIT_ALERT_CHG_MIN;
-	} else {									// Normal Charging
-		trickle_chg_max = TRICKLE_CHG_MAX;					// to unintentional charging stop
-			trickle_chg_timer_start = TRICKLE_CHG_TIMER_START;
-			trickle_chg_min = TRICKLE_CHG_MIN;
-			if(di->previous_temp_C < TEMP_LIMIT_LOWER ||
-			   di->previous_temp_C > TEMP_LIMIT_UPPER) {
-				start_monitor = 0;
-				set_end_of_charge(0);
-				set_charging_timer(0);
-			}
 		}
-				
+	}
+
 	// Deactive charger for protect overcharge & monitoring
 	if(chr_ic_status != CHARGING_IC_DEACTIVE) {
 		if(di->voltage_uV >= trickle_chg_max || charging_timeout() || end_of_charge) {
@@ -1627,7 +1612,7 @@ static int set_battery_charging(struct twl4030_bci_device_info *di)
 #endif 
 			}
 			set_charging_timer(0);
-				set_end_of_charge(0);
+			set_end_of_charge(0);
 			if(start_monitor == 0) {
 				printk(KERN_DEBUG "[Battery] Trickle Charging Start!\n");
 				start_monitor = 1;
@@ -1854,7 +1839,7 @@ static int twl4030_bci_battery_get_property(struct power_supply *psy,
 					union power_supply_propval *val)
 {
 	struct twl4030_bci_device_info *di;
-	int status = 0;
+	// int status = 0; // 20120213 taeju.park@lge.com To delete compile warning, unused variable.
 
 	/* LGE_CHANGE_S [sookyoung.kim@lge.com] 2010-03-19 */
 #if defined(CONFIG_HUB_MUIC) && !defined(CONFIG_LGE_OMAP3_EXT_PWR)
@@ -1865,8 +1850,8 @@ static int twl4030_bci_battery_get_property(struct power_supply *psy,
 	di = to_twl4030_bci_device_info(psy);
 /*
 	switch (psp) {
-	case POWER_SUPPLY_PROP_STATUS:
-		val->intval = di->charge_status;
+		case POWER_SUPPLY_PROP_STATUS:
+			val->intval = di->charge_status;
 			return 0;
 		default:
 			break;
@@ -1877,34 +1862,34 @@ static int twl4030_bci_battery_get_property(struct power_supply *psy,
 			val->intval = di->charge_status;
 			if(di->voltage_uV > FORCE_FULL_CHARGE_VOLTAGE_LEVEL) {		// QM Requested for Dummy Battery Test (LGP970)
 				val->intval = POWER_SUPPLY_STATUS_FULL;
-	}
+			}
 			break;
-	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 			val->intval = di->voltage_uV;
-		break;
-	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		val->intval = di->current_uA;
-		break;
-	case POWER_SUPPLY_PROP_TEMP:
+			break;
+		case POWER_SUPPLY_PROP_CURRENT_NOW:
+			val->intval = di->current_uA;
+			break;
+		case POWER_SUPPLY_PROP_TEMP:
 			if(di->battery_present == 0)		// No Battery or Dummy Battery
 				val->intval = 200;
 			else
 	                val->intval = di->temp_C - 40;	// -40 is LGP970 only value
                         //val->intval = di->temp_C;
-		break;
-	case POWER_SUPPLY_PROP_ONLINE:
+			break;
+		case POWER_SUPPLY_PROP_ONLINE:
 #if defined(CONFIG_HUB_MUIC) || defined(CONFIG_LGE_OMAP3_EXT_PWR)
 			val->intval = di->charge_rsoc;
 			break;
 #else
-		status = twl4030bci_status();
-		if ((status & AC_STATEC) == AC_STATEC)
-			val->intval = POWER_SUPPLY_TYPE_MAINS;
-		else if (usb_charger_flag)
-			val->intval = POWER_SUPPLY_TYPE_USB;
-		else
-			val->intval = 0;
-		break;
+			status = twl4030bci_status();
+			if ((status & AC_STATEC) == AC_STATEC)
+				val->intval = POWER_SUPPLY_TYPE_MAINS;
+			else if (usb_charger_flag)
+				val->intval = POWER_SUPPLY_TYPE_USB;
+			else
+				val->intval = 0;
+			break;
 #endif
 		case POWER_SUPPLY_PROP_PRESENT:
 			val->intval = di->battery_present;
@@ -1920,7 +1905,7 @@ static int twl4030_bci_battery_get_property(struct power_supply *psy,
 #endif
 
 			break;
-	case POWER_SUPPLY_PROP_CAPACITY:
+		case POWER_SUPPLY_PROP_CAPACITY:
 #if defined(CONFIG_MACH_LGE_HUB) || defined(CONFIG_MACH_LGE_SNIPER)
 			val->intval = di->battery_capacity;
 			// for Lockscreen sync with status bar
@@ -1936,22 +1921,22 @@ static int twl4030_bci_battery_get_property(struct power_supply *psy,
 				}
 			}
 #else //CONFIG_MACH_LGE_HUB
-		val->intval = twl4030battery_capacity(di);
+			val->intval = twl4030battery_capacity(di);
 #endif //CONFIG_MACH_LGE_HUB
 			break;
 #if defined(CONFIG_MACH_LGE_HUB)	/* LGE_CHANGE [HUB: newcomet@lge.com] on 2009-9-23, for <HAL:battery info. path> */
 			/* FIXME : It depends on H/W specific */
 		case POWER_SUPPLY_PROP_HEALTH:
 			if(!di->battery_present)
-					val->intval = POWER_SUPPLY_HEALTH_UNKNOWN;
+				val->intval = POWER_SUPPLY_HEALTH_UNKNOWN;
 			else if(di->voltage_uV > 5000)			// Over voltage
-					val->intval = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
+				val->intval = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
 			else if(di->temp_C < TEMP_CRITICAL_LOWER)	// Cold
-					val->intval = POWER_SUPPLY_HEALTH_COLD;
+				val->intval = POWER_SUPPLY_HEALTH_COLD;
 			else if(di->temp_C > TEMP_CRITICAL_UPPER)	// Hot
-					val->intval = POWER_SUPPLY_HEALTH_OVERHEAT;
+				val->intval = POWER_SUPPLY_HEALTH_OVERHEAT;
 			else
-					val->intval = POWER_SUPPLY_HEALTH_GOOD;
+				val->intval = POWER_SUPPLY_HEALTH_GOOD;
 			break;
 		case POWER_SUPPLY_PROP_TECHNOLOGY:
 			val->intval = POWER_SUPPLY_TECHNOLOGY_LION;	// Fixed value : Li-ion
@@ -2036,12 +2021,12 @@ static int twl4030_usb_bci_battery_get_property(struct power_supply *psy,
 			} else {
 				val->intval = 0;
 			}
-		break;
+			break;
 #else
 #error
 #endif 
-	default:
-		return -EINVAL;
+		default:
+			return -EINVAL;
 	}
 
 	return 0;
@@ -2123,7 +2108,7 @@ static int __devinit twl4030_bci_battery_probe(struct platform_device *pdev)
 	di->usb.get_property = twl4030_usb_bci_battery_get_property;
 	di->usb.external_power_changed = NULL;
 	di->usb.set_charged = NULL;
-
+	
 #else
 
 	/*
@@ -2349,7 +2334,7 @@ static int twl4030_bci_battery_suspend(struct platform_device *pdev,
 	if(system_rev >= 4) {
 		// do nothing
 	} else {
-	cancel_delayed_work(&di->twl4030_bci_monitor_work);
+		cancel_delayed_work(&di->twl4030_bci_monitor_work);
 	}
 #endif
 #if BK_BATT

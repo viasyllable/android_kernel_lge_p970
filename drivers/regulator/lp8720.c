@@ -122,7 +122,7 @@ void subpm_set_output(subpm_output_enum outnum, int onoff)
 
 void subpm_output_enable(void)
 {
-	u8 data;
+	// u8 data; // 20120213 taeju.park@lge.com To delete compile warning, unused variable.
 	struct lp8720_platform_data *pdata;
 
 	if(lp8720_client == NULL)
@@ -173,7 +173,20 @@ EXPORT_SYMBOL(subpm_output_enable);
 static void lp8720_init(void)
 {
 	struct lp8720_platform_data *pdata = lp8720_client->dev.platform_data;
+#if defined(CONFIG_PRODUCT_LGE_LU6800)  // 20120521 goochang.jeong@lge.com from GB
+	lp8720_write_reg(lp8720_client, LP8720_LDO1_SETTING, LP8720_NO_STARTUP | 0x0C); //1.8v - HDMI 
+	lp8720_write_reg(lp8720_client, LP8720_LDO2_SETTING, LP8720_NO_STARTUP | 0x1D); //3.0v - MOTOR
+	lp8720_write_reg(lp8720_client, LP8720_LDO3_SETTING, LP8720_NO_STARTUP | 0x17); //2.7v
+	lp8720_write_reg(lp8720_client, LP8720_LDO4_SETTING, LP8720_NO_STARTUP | 0x11); //1.8v
+	lp8720_write_reg(lp8720_client, LP8720_LDO5_SETTING, LP8720_NO_STARTUP | 0x19); //2.8v
+	lp8720_write_reg(lp8720_client, LP8720_BUCK_SETTING1, LP8720_NO_STARTUP | 0x09);
+	lp8720_write_reg(lp8720_client, LP8720_BUCK_SETTING2, 0x09); //1.2v
+	lp8720_write_reg(lp8720_client, LP8720_OUTPUT_ENABLE, 0x80 | lp8720_output_status);
 
+	gpio_direction_output(pdata->en_gpio_num, 1);
+
+	udelay(500);
+#else
 	//lp8720_write_reg(lp8720_client, LP8720_LDO1_SETTING, LP8720_NO_STARTUP | 0x1d); //3.0v - MMC0 //[LGSI]Saravanan MR Patches
 	lp8720_write_reg(lp8720_client, LP8720_LDO1_SETTING, LP8720_NO_STARTUP | 0x1f);//[LGSI]Saravanan MR Patches
 	lp8720_write_reg(lp8720_client, LP8720_LDO2_SETTING, LP8720_NO_STARTUP | 0x1d); //3.0v - MOTOR
@@ -186,11 +199,13 @@ static void lp8720_init(void)
 	lp8720_write_reg(lp8720_client, LP8720_PULLDOWN_BITS, 0xBF); //don't  reset registers after thermal shutdown.
 
 	gpio_direction_output(pdata->en_gpio_num, 1);
-
+#endif
 	return;
 }
 
-static int __init lp8720_probe(struct i2c_client *client, const struct i2c_device_id *id)
+// kibum.lee@lge.com section mismatch error fix
+//static int __init lp8720_probe(struct i2c_client *client, const struct i2c_device_id *id)
+static int lp8720_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct lp8720_platform_data *pdata;
 
@@ -222,22 +237,26 @@ static int lp8720_suspend(struct i2c_client *client, pm_message_t mesg)
 	struct lp8720_platform_data *pdata;
 	pdata = client->dev.platform_data;
 
+#if !defined(CONFIG_PRODUCT_LGE_KU5900)&& !defined(CONFIG_PRODUCT_LGE_P970)
 	/*if sdcard is inserted, power must be alive*/
 	if (lp8720_output_status & 0x01) return 0;
 
 	//printk("skykrkrk %s status %02x\n", __func__, lp8720_output_status);
 	gpio_direction_output(pdata->en_gpio_num, 0);
+#endif
 	return 0;
 }
 
 static int lp8720_resume(struct i2c_client *client)
 {
+#if !defined(CONFIG_PRODUCT_LGE_KU5900)&& !defined(CONFIG_PRODUCT_LGE_P970)
 	/*if sdcard is inserted, power must be alive*/
 	if (lp8720_output_status & 0x01) {
 		return 0;
 	}
 
 	lp8720_init();
+#endif
 
 	return 0;
 }
@@ -259,6 +278,16 @@ static struct i2c_driver subpm_lp8720_driver = {
 	},
 };
 
+#ifdef CONFIG_OMAP2_DSS_HDMI
+void lp8720_reinit()
+{
+    printk(KERN_INFO "$$$$$$$$$$$$$$$ lp8720_reinit $$$$$$$$$$$$\n");	
+	 lp8720_init();
+
+}
+EXPORT_SYMBOL(lp8720_reinit);
+#endif
+
 /* <sunggyun.yu@lge.com> for early initialization */
 #if 1////
 void __init subpm_lp8720_init(void)
@@ -279,6 +308,7 @@ static void __exit subpm_lp8720_exit(void)
 module_init(subpm_lp8720_init);
 module_exit(subpm_lp8720_exit);
 #endif////
+
 
 MODULE_AUTHOR("LG Electronics");
 MODULE_DESCRIPTION("LP8720 Regulator Driver");

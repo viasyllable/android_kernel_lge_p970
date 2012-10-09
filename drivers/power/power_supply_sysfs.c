@@ -17,8 +17,6 @@
 
 #include "power_supply.h"
 
-//#define TESTCODE	1
-
 /*
  * This is because the name "current" breaks the device attr macro.
  * The "current" word resolves to "(get_current())" so instead of
@@ -38,22 +36,14 @@
 	.store = power_supply_store_property,				\
 }
 
-#ifdef TESTCODE
-#define POWER_SUPPLY_ATTR_RW(_name)					\
-{									\
-	.attr = { .name = #_name, .mode = 0666 },					\
-	.show = power_supply_show_property,				\
-	.store = power_supply_store_property,				\
-}
-#endif
-
 static struct device_attribute power_supply_attrs[];
 
 static ssize_t power_supply_show_property(struct device *dev,
 					  struct device_attribute *attr,
 					  char *buf) {
 	static char *type_text[] = {
-		"Battery", "UPS", "Mains", "USB"
+		"Battery", "UPS", "Mains", "USB",
+		"USB_DCP", "USB_CDP", "USB_ACA"
 	};
 	static char *status_text[] = {
 		"Unknown", "Charging", "Discharging", "Not charging", "Full"
@@ -119,24 +109,12 @@ static ssize_t power_supply_store_property(struct device *dev,
 	union power_supply_propval value;
 	long long_val;
 
-#ifdef TESTCODE
-	if( off == POWER_SUPPLY_PROP_PSEUDO_BATT )
-		value.strval = buf;
-	else
-	{
-#endif
-
 	/* TODO: support other types than int */
 	ret = strict_strtol(buf, 10, &long_val);
 	if (ret < 0)
 		return ret;
 
 	value.intval = long_val;
-
-#ifdef TESTCODE
-	}
-#endif
-
 
 	ret = psy->set_property(psy, off, &value);
 	if (ret < 0)
@@ -161,10 +139,12 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(voltage_min_design),
 	POWER_SUPPLY_ATTR(voltage_now),
 	POWER_SUPPLY_ATTR(voltage_avg),
+	POWER_SUPPLY_ATTR(current_max),
 	POWER_SUPPLY_ATTR(current_now),
 	POWER_SUPPLY_ATTR(current_avg),
 	POWER_SUPPLY_ATTR(power_now),
 	POWER_SUPPLY_ATTR(power_avg),
+	POWER_SUPPLY_ATTR(atcommand_set), //20101023, taehwan.kim@lge.com, Battery AT command
 	POWER_SUPPLY_ATTR(charge_full_design),
 	POWER_SUPPLY_ATTR(charge_empty_design),
 	POWER_SUPPLY_ATTR(charge_full),
@@ -186,12 +166,8 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(time_to_empty_avg),
 	POWER_SUPPLY_ATTR(time_to_full_now),
 	POWER_SUPPLY_ATTR(time_to_full_avg),
+	POWER_SUPPLY_ATTR(temp_control), // 20120725, mannsik.chung@lge.com, Enable charging by fake mode.
 	POWER_SUPPLY_ATTR(type),
-
-#ifdef TESTCODE
-	POWER_SUPPLY_ATTR_RW(pseudo_batt),
-#endif
-
 	/* Properties of type `const char *' */
 	POWER_SUPPLY_ATTR(model_name),
 	POWER_SUPPLY_ATTR(manufacturer),
@@ -296,7 +272,7 @@ int power_supply_uevent(struct device *dev, struct kobj_uevent_env *env)
 		attr = &power_supply_attrs[psy->properties[j]];
 
 		ret = power_supply_show_property(dev, attr, prop_buf);
-		if (ret == -ENODEV) {
+		if (ret == -ENODEV || ret == -ENODATA) {
 			/* When a battery is absent, we expect -ENODEV. Don't abort;
 			   send the uevent with at least the the PRESENT=0 property */
 			ret = 0;

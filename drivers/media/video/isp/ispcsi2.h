@@ -4,8 +4,8 @@
  * Copyright (C) 2009 Texas Instruments.
  *
  * Contributors:
- * 	Sergio Aguirre <saaguirre@ti.com>
- * 	Dominic Curran <dcurran@ti.com>
+ *	Sergio Aguirre <saaguirre@ti.com>
+ *	Dominic Curran <dcurran@ti.com>
  *
  * This package is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -20,8 +20,8 @@
 #define OMAP_ISP_CSI2_API_H
 #include <linux/videodev2.h>
 
-#define ISP_CSI2_LANE_OFF 	0
-#define ISP_CSI2_LANE_ON 	1
+#define ISP_CSI2_LANE_OFF	0
+#define ISP_CSI2_LANE_ON	1
 
 enum isp_csi2_output {
 	CSI2_MEM,
@@ -72,7 +72,7 @@ enum isp_csi2_frame_mode {
 struct csi2_lanecfg {
 	u8 pos;
 	u8 pol;
-	u8 state; 	/*Current state - 1-Used  0-Unused */
+	u8 state;	/*Current state - 1-Used  0-Unused */
 };
 
 struct isp_csi2_lanes_cfg {
@@ -276,7 +276,8 @@ int isp_csi2_timings_config_stopstate_cnt(struct isp_csi2_device *isp_csi2,
 int isp_csi2_timings_update(struct isp_csi2_device *isp_csi2,
 			    u8 io, bool force_update);
 int isp_csi2_timings_get(struct isp_csi2_device *isp_csi2, u8 io);
-int isp_csi2_timings_update_all(struct isp_csi2_device *isp_csi2, bool force_update);
+int isp_csi2_timings_update_all(struct isp_csi2_device *isp_csi2,
+				bool force_update);
 int isp_csi2_timings_get_all(struct isp_csi2_device *isp_csi2);
 void isp_csi2_irq_complexio1_set(struct isp_csi2_device *isp_csi2, int enable);
 void isp_csi2_irq_ctx_set(struct isp_csi2_device *isp_csi2, int enable);

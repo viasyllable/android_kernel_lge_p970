@@ -1089,15 +1089,15 @@ int ispccdc_s_pipeline(struct isp_ccdc_device *isp_ccdc,
 	if (pipe->ccdc_out == CCDC_OTHERS_MEM) {
 		isp_reg_writel(dev, 0, OMAP3_ISP_IOMEM_CCDC,
 			       ISPCCDC_VP_OUT);
-        } else {
-                isp_reg_writel(dev,
+	} else {
+			isp_reg_writel(dev,
 			(pipe->ccdc_out_w_img
 			<< ISPCCDC_VP_OUT_HORZ_NUM_SHIFT) |
 			(pipe->ccdc_out_h <<
 			ISPCCDC_VP_OUT_VERT_NUM_SHIFT),
 			OMAP3_ISP_IOMEM_CCDC,
 			ISPCCDC_VP_OUT);
-        }
+	}
 
 	ispccdc_setup_lsc(isp_ccdc, pipe);
 

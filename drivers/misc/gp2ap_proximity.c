@@ -121,7 +121,8 @@ static int hub_read_vo_bit(struct i2c_client *client)
 
 	if(enabled) {
 		msleep(1);
-		hub_proxi_read_reg(client, 0x00, &val);
+		// hub_proxi_read_reg(client, 0x00, &val);
+		hub_proxi_read_reg(client, 0x00, (unsigned char *)&val); // 20120213 taeju.park@lge.com To delete compile warning, incompatible types
 	}
 	else
 		return -EPERM;
@@ -391,7 +392,9 @@ static void hub_proxi_late_resume(struct early_suspend *handler);
 #endif  /* 20110304 seven.kim@lge.com late_resume_lcd [END] */
 /* LGE_CHANGE_E, hyun.seungjin@lge.com, 2011-04-13, Sync with P970 */
 
-static int __init hub_proxi_probe(struct i2c_client *client, const struct i2c_device_id *id)
+// kibum.lee@lge.com section mismatch error fix
+//static int __init hub_proxi_probe(struct i2c_client *client, const struct i2c_device_id *id)
+static int hub_proxi_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int ret;
 	struct hub_proxi_data *data;
@@ -503,7 +506,8 @@ static int __init hub_proxi_probe(struct i2c_client *client, const struct i2c_de
 	input_set_abs_params(data->input_dev, ABS_DISTANCE, 0, 1, 0, 0);
 	data->input_dev->name = "proximity";
 // 20101004 jh.koo@lge.com, fix initial operation of proximity sensor [START_LGE]
-	data->input_dev->abs[ABS_DISTANCE] = -1;
+// compile errror from GB (abs is nothing!! refer input.h)
+//	data->input_dev->abs[ABS_DISTANCE] = -1;
 // 20101004 jh.koo@lge.com, fix initial operation of proximity sensor [END_LGE]
 	ret = input_register_device(data->input_dev);
 	if (ret) {

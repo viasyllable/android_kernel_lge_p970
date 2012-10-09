@@ -20,12 +20,14 @@ static int hub_wifi_cd;		/* WIFI virtual 'card detect' status */
 static void (*wifi_status_cb)(int card_present, void *dev_id);
 static void *wifi_status_cb_devid;
 
+/* LGE_CHANGE_S, [younggil.lee@lge.com], 2011-05-04, <add Setting enable Wifi Host wakeup> */
 void config_wlan_mux(void)
 {
 	omap_mux_init_gpio(HUB_WIFI_IRQ_GPIO, OMAP_PIN_INPUT |
 				OMAP_PIN_OFF_WAKEUPENABLE);
 	omap_mux_init_gpio(HUB_WIFI_PMENA_GPIO, OMAP_PIN_OUTPUT);
 }
+/* LGE_CHANGE_E, [younggil.lee@lge.com], 2011-05-04, <add Setting enable Wifi Host wakeup> */
 
 int omap_wifi_status_register(void (*callback)(int card_present,
 						void *dev_id), void *dev_id)
@@ -79,7 +81,8 @@ int hub_wifi_power(int on)
 	gpio_set_value(HUB_WIFI_PMENA_GPIO, on);
 	hub_wifi_power_state = on;
 
-	msleep(300);
+	//bill.jung@lge.com - Add delay
+	//msleep(300);
 	
 	return 0;
 }

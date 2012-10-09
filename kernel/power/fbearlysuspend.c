@@ -45,24 +45,12 @@ static void stop_drawing_early_suspend(struct early_suspend *h)
 	spin_unlock_irqrestore(&fb_state_lock, irq_flags);
 
 	wake_up_all(&fb_state_wq);
-/*[Saravanak.nachimuthu@lge.com] LGSI The previous screen visible so flickering effect is seen START */
-#if 0 /*LG_CHANGE_S lee.hyunji@lge.com 20110425 The previous screen visible .*/
-	ret = wait_event_timeout(fb_state_wq,
-				 fb_state == FB_STATE_STOPPED_DRAWING,
-				 HZ*2);
-#else
 	ret = wait_event_timeout(fb_state_wq,
 				 fb_state == FB_STATE_STOPPED_DRAWING,
 				 HZ);
-#endif
-/*[Saravanak.nachimuthu@lge.com] LGSI The previous screen visible so flickering effect is seen END */
 	if (unlikely(fb_state != FB_STATE_STOPPED_DRAWING))
 		pr_warning("stop_drawing_early_suspend: timeout waiting for "
 			   "userspace to stop drawing\n");
-
-// prime@sdcmicro.com Temporary - Forced state change - UI must stop the draw before here [START]
-	fb_state = FB_STATE_STOPPED_DRAWING;
-// prime@sdcmicro.com Temporary - Forced state change - UI must stop the draw before here [END]
 }
 
 /* tell userspace to start drawing */

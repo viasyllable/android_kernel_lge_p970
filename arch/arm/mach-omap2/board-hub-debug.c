@@ -2,6 +2,7 @@
  * linux/arch/arm/mach-omap2/board-hub-debug.c
  *
  * Copyright (C) 2010 LG Electronic Inc.
+ * Sung Kyun Yu <sunggyun.yu@lge.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -20,44 +21,47 @@
 #include <asm/mach/map.h>
 #include <linux/notifier.h>
 #include <linux/mutex.h>
+#include <linux/reboot.h>
 
-#ifdef CONFIG_ANDROID_RAM_CONSOLE
-#define RAM_CONSOLE_START   (0x80000000 + 511 * SZ_1M)
-#define RAM_CONSOLE_SIZE    (SZ_1M)
-static struct resource ram_console_resource = {
-	.start = RAM_CONSOLE_START,
-	.end = (RAM_CONSOLE_START + RAM_CONSOLE_SIZE - 1),
-	.flags = IORESOURCE_MEM,
-};
 
-struct platform_device hub_ram_console_device = {
-	.name = "ram_console",
-	.id = -1,
-	.num_resources = 1,
-	.resource = &ram_console_resource,
-};
-#endif
-
+/*20110310 seven.kim@lge.com to prevent IRQ during soft reset [START] */
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2012.03.21] - When added to the board-ku5900-peripherals.c will be rollback.(TBD)
+//#ifdef CONFIG_TOUCHSCREEN_HUB_SYNAPTICS
+#if defined(CONFIG_TOUCHSCREEN_HUB_SYNAPTICS) || defined(CONFIG_TOUCHSCREEN_KU5900_SYNAPTICS)
 extern void synaptics_ts_disable_irq();
+#endif
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2012.03.21]- When added to the board-ku5900-peripherals.c will be rollback.(TBD)
+/*20110310 seven.kim@lge.com to prevent IRQ during soft reset [END] */
 
+/* LGE_CHANGE_S [skykrkrk@lge.com] 2009-12-07, Error handling */
 #ifdef CONFIG_FRAMEBUFFER_CONSOLE
 extern void lge_hub_display_message_on_screen(const char *buf);
-#endif
 extern int log_buf_copy(char *dest, int idx, int len);
-extern struct atomic_notifier_head panic_notifier_list;
-extern void emergency_restart(void);
-extern void reboot_setup(char *str);
+#endif
 
 char reset_mode = 0;
+#ifdef CONFIG_HIDDEN_RESET
 extern int hidden_reset_enabled;
-extern void resume_console(void);
+#else
+static int hidden_reset_enabled = 0;
+#endif // CONFIG_HIDDEN_RESET
+extern void resume_console();
 
 static int lge_hub_panic_event(struct notifier_block *this,
 			       unsigned long event, void *ptr)
 {
-	//resume_console();
+	printk("[SHYUN] [%s] - [%d] [IN]\n", __func__, __LINE__);
 
+	resume_console();
+
+/*20110310 seven.kim@lge.com to prevent IRQ during soft reset [START] */
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2012.03.21] - When added to the board-ku5900-peripherals.c will be rollback.(TBD)
+//#ifdef CONFIG_TOUCHSCREEN_HUB_SYNAPTICS
+#if defined(CONFIG_TOUCHSCREEN_HUB_SYNAPTICS) || defined(CONFIG_TOUCHSCREEN_KU5900_SYNAPTICS)
 	synaptics_ts_disable_irq();
+#endif
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2012.03.21]- When added to the board-ku5900-peripherals.c will be rollback.(TBD)
+/*20110310 seven.kim@lge.com to prevent IRQ during soft reset [END] */
 
 	if (hidden_reset_enabled) {
 		reset_mode = 'h';  /* SW Hidden Reset */
@@ -128,8 +132,6 @@ static int lge_hub_panic_event(struct notifier_block *this,
 
 #endif /* CONFIG_FRAMEBUFFER_CONSOLE */
 
-		//reset_mode = 'p';
-		/* Temporary, to prevent dev deadlocks: Go to recovery after a panic */
 		reset_mode = 'f';
 	}
 
@@ -141,6 +143,8 @@ static int lge_hub_panic_event(struct notifier_block *this,
 static int lge_hub_reboot_event(struct notifier_block *this,
 				unsigned long event, void *cmd)
 {
+	printk("[SHYUN] [%s] - [%d] [IN]\n", __func__, __LINE__);
+
 	if (event == SYS_HALT) {
 		/* TODO */
 	} else if (event == SYS_RESTART) {
@@ -160,7 +164,14 @@ static int lge_hub_reboot_event(struct notifier_block *this,
 					reset_mode = 'h';
 		}
 	}
+/* 20110310 seven.kim@lge.com to prevent IRQ during soft reset [START] */
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2012.03.21] - When added to the board-ku5900-peripherals.c will be rollback.(TBD)
+//#ifdef CONFIG_TOUCHSCREEN_HUB_SYNAPTICS
+#if defined(CONFIG_TOUCHSCREEN_HUB_SYNAPTICS) || defined(CONFIG_TOUCHSCREEN_KU5900_SYNAPTICS)
 	synaptics_ts_disable_irq();
+#endif
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2012.03.21]- When added to the board-ku5900-peripherals.c will be rollback.(TBD)
+/* 20110310 seven.kim@lge.com to prevent IRQ during soft reset [END] */
 	return NOTIFY_DONE;
 }
 
@@ -176,7 +187,7 @@ extern int register_reboot_notifier(struct notifier_block *nb);
 
 static int hub_debug_init(void)
 {
-printk("%s\n", __func__);
+	printk("%s\n", __func__);
 	atomic_notifier_chain_register(&panic_notifier_list, &lge_hub_panic_nb);
 	register_reboot_notifier(&lge_hub_reboot_nb);
 	return 0;
@@ -188,3 +199,4 @@ MODULE_DESCRIPTION("Sniper Debugging System Driver");
 MODULE_AUTHOR("Sunggyun Yu <sunggyun.yu@lge.com>");
 MODULE_LICENSE("GPL");
 
+/* LGE_CHANGE_E [skykrkrk@lge.com] 2009-12-07, Error handling */

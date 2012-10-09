@@ -4,7 +4,7 @@
  * Copyright (C) 2009 Texas Instruments.
  *
  * Contributors:
- * 	Atanas Filipov <afilipov@mm-sol.com>
+ *	Atanas Filipov <afilipov@mm-sol.com>
  *
  * This package is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -16,7 +16,7 @@
  */
 
 #include <linux/debugfs.h>
-
+#include <linux/slab.h>
 #include "isp.h"
 #include "ispreg.h"
 #include "ispccdc.h"

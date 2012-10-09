@@ -69,10 +69,7 @@ static struct vcontrol {
 		.id = V4L2_CID_FOCUS_RELATIVE,
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.name = "Lens Relative Position",
-		.minimum = 0,
-		.maximum = 0,
 		.step = LV8093_MAX_RELATIVE_STEP,
-		.default_value = 0,
 		}
 	,}
 };
@@ -260,14 +257,14 @@ static int lv8093_reginit(struct i2c_client *client)
 /**
  * lv8093_af_setfocus - Sets the desired focus.
  * @relpos: Relative focus position:
- * 			-ve - Direction INFINITY.
- * 			+ve - Direction MACRO.
- * 			abs(relpos) gives number of steps in desired direction.
+ *			-ve - Direction INFINITY.
+ *			+ve - Direction MACRO.
+ *			abs(relpos) gives number of steps in desired direction.
  *
  * Returns 0 on success, -EINVAL if camera is off or returned errors
  * from lv8093_reg_write function.
  **/
-int lv8093_af_setfocus(s16 relpos)
+static int lv8093_af_setfocus(s16 relpos)
 {
 	struct lv8093_device *af_dev = &lv8093;
 	struct i2c_client *client = af_dev->i2c_client;
@@ -295,7 +292,7 @@ int lv8093_af_setfocus(s16 relpos)
 	}
 
 	if (ret < 0) {
-		v4l_err(client, "Unable to write " LV8093_NAME
+		v4l_err(client, "Unable to focus" LV8093_NAME
 			" lens HW\n");
 		return -EINVAL;
 	}
@@ -309,7 +306,7 @@ int lv8093_af_setfocus(s16 relpos)
  * Returns:
  *  0 for READY, -EBUSY for device busy, -EINVAL on error.
  **/
-int lv8093_is_busy(void)
+static int lv8093_is_busy(void)
 {
 	struct lv8093_device *af_dev = &lv8093;
 	struct i2c_client *client = af_dev->i2c_client;
@@ -319,8 +316,8 @@ int lv8093_is_busy(void)
 	ret = lv8093_reg_read(client, &regval);
 
 	if (ret < 0) {
-		dev_err(&client->dev, "Unable to read " LV8093_NAME
-			" lens HW\n");
+		v4l_err(client, "Unable to read " LV8093_NAME
+		" lens HW\n");
 		return -EINVAL;
 	}
 
@@ -497,8 +494,6 @@ static int ioctl_s_power(struct v4l2_int_device *s, enum v4l2_power on)
 		if (lens->power_state == V4L2_POWER_STANDBY) {
 			rval = lv8093_reginit(c);
 			if (rval < 0) {
-				v4l_err(c, "Unable to initialize " LV8093_NAME
-					" lens HW\n");
 				lens->state = LENS_NOT_DETECTED;
 				return rval;
 			}
@@ -546,15 +541,11 @@ static int ioctl_dev_init(struct v4l2_int_device *s)
 
 	err = lv8093_reginit(c);
 	if (err < 0) {
-		v4l_err(c, "Unable to initialize " LV8093_NAME
-			" lens HW\n");
 		lens->state = LENS_NOT_DETECTED;
 		return err;
 	}
 
 	err = lv8093_power_off(lens);
-	if (err)
-		return -ENODEV;
 
 	return 0;
 }
@@ -661,16 +652,13 @@ static int __init lv8093_init(void)
 
 	err = i2c_add_driver(&lv8093_i2c_driver);
 	if (err)
-		goto fail;
-	pr_info("Registered " LV8093_NAME " as i2c device.\n");
-
-	return err;
-fail:
-	pr_err("Failed to register " LV8093_NAME " as i2c driver.\n");
+		pr_info("Registered " LV8093_NAME " as i2c device.\n");
+	else
+		pr_err("Failed to register " LV8093_NAME " as i2c driver.\n");
 	return err;
 }
 
-late_initcall(lv8093_init);
+module_init(lv8093_init);
 
 /**
  * lv8093_cleanup - Module cleanup.

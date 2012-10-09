@@ -13,9 +13,9 @@
 #ifndef LV8093_H
 #define LV8093_H
 
-/* i2c slave address = 0xE4 */
+/* i2c slave address = 0x72 */
 #define LV8093_AF_I2C_ADDR			0x72
-#define LV8093_NAME 				"lv8093"
+#define LV8093_NAME				"lv8093"
 
 /**
  * struct lv8093_platform_data - platform data values and access functions

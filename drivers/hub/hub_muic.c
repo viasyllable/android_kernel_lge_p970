@@ -60,6 +60,8 @@
 //#define CP_RETAIN	//LGE_UPDATE [jaejoong.kim] disable CP_RETAIN
 /* LGE_CHANGE_E [kenneth.kang@lge.com] 2010-12-14, CP retain mode and 910K cable detect*/
 
+extern void android_USB_disconnect();// for usb disconnect event
+
 static const char name_muic_mode[MUIC_MODE_NO][30] = {
 	"MUIC_UNKNOWN",		// 0
 	"MUIC_NONE",   		// 1
@@ -96,6 +98,9 @@ extern s32 key_pressed;
 extern s32 key_row;
 extern s32 key_col;
 static s32 key_was_pressed = 0;
+
+/* kibum.lee@lge.com compile error ICS */
+//extern void charger_state_update_by_other(void);
 
 /* LGE_CHANGE_S [kenneth.kang@lge.com] 2010-12-14, CP retain mode */
 #ifdef CP_RETAIN
@@ -284,7 +289,8 @@ void usif_switch_ctrl(TYPE_USIF_MODE mode){
 	if(!muic_init_done){
 
 		printk(KERN_WARNING "[MUIC] MUIC has not been initialized! Nothing will be done!!!.\n");
-		return 0;
+		//return 0; 
+		return; // 20120213 taeju.park@lge.com To delete compile warning, void return
 	}	
     /* 20110113 ks.kwon@lge.com check muic driver init. state [END] */
 /* LGE_CHANGE_END 2011-03-16 kenneth.kang@lge.com */    	
@@ -345,6 +351,13 @@ s32 muic_AP_UART_set(void){
 	/* Connect CP UART signals to AP */
 	//usif_switch_ctrl(USIF_AP);
 	/* Connect AP UART to MUIC UART */
+
+	// kibum.lee@lge.com ICS temp
+	gpio_direction_output(IFX_VBUS_EN, 1);
+	gpio_direction_output(DP3T_IN_1_GPIO, 1);
+	gpio_direction_output(DP3T_IN_2_GPIO, 1);
+	
+	
 	dp3t_switch_ctrl(DP3T_AP_UART);
 
 	if (muic_device == MAX14526) {
@@ -378,7 +391,7 @@ s32 muic_AP_USB_set(void){
 
 		printk(KERN_WARNING "[MUIC] MUIC has not been initialized! Nothing will be done!!!.\n");
 		return 0;
-	}
+	}	
     /* 20110113 ks.kwon@lge.com check muic driver init. state [END] */
 /* LGE_CHANGE_END 2011-03-16 kenneth.kang@lge.com */
 
@@ -449,7 +462,7 @@ s32 muic_CP_UART_set(void){
 
 	muic_mode = MUIC_CP_UART;
 	printk(KERN_WARNING "[MUIC] muic_distinguish_vbus_accessory(): CP_UART\n");
-	
+
 	/* wake lock for the factory mode */
 /* LGE_CHANG_START 2011-03-30 kenneth.kang@lge.com wakelock on when AT command sequence by CP UART */
 	set_wakelock(1);
@@ -587,7 +600,7 @@ s32 muic_distinguish_charger(void){
 
 	if (muic_device == MAX14526) {
 		/* Prepare for reading charger type */
-		ret = muic_i2c_write_byte(CONTROL_2, MINT_EN | MCHG_TYP);		
+		ret = muic_i2c_write_byte(CONTROL_2, MINT_EN | MCHG_TYP);
 		/* LGE_UPDATE_S [daewung.kim@lge.com] 2010-12-01, interrupt clear in TA detection */
 		msleep(70);
 		ret = muic_i2c_read_byte(INT_STAT, &status_val);
@@ -923,7 +936,7 @@ static void muic_device_none_detect(void)
 				else
 #endif /* #if 0 */
 // LGE_UPDATE_S 20110521 [jaejoong.kim@lge.com] block CP usb for commercial version
-				muic_AP_USB_set();
+					muic_AP_USB_set();
 			}
 		}
 		else { 	// USB Detected
@@ -934,7 +947,7 @@ static void muic_device_none_detect(void)
 			else
 #endif /* #if 0 */
 // LGE_UPDATE_S 20110521 [jaejoong.kim@lge.com] block CP usb for commercial version
-			muic_AP_USB_set();
+				muic_AP_USB_set();
 		}
 	}
 	else {
@@ -956,6 +969,12 @@ s32 muic_device_detection(s32 upon_irq)
 	}	
     /* 20110113 ks.kwon@lge.com check muic driver init. state [END] */
 /* LGE_CHANGE_END 2011-03-16 kenneth.kang@lge.com */
+
+//+DEJA_S : for debugging must remove
+//	muic_AP_UART_set();
+//	return 0;
+//+DEJA_E
+
 	// Read INT_STAT_REG (0x04)
 	muic_i2c_read_byte(INT_STAT, &int_stat_val);
 	printk(KERN_INFO "[MUIC] INT_STAT = %x\n", int_stat_val);
@@ -995,6 +1014,7 @@ s32 muic_device_detection(s32 upon_irq)
 
 	// USB Mode
 	case MUIC_AP_USB:
+		android_USB_disconnect(); // for usb disconnect event
 	case MUIC_CP_USB:
 		if ((int_stat_val & MVBUS) == 0){
 			// Exit USB Mode
@@ -1100,11 +1120,13 @@ void vbus_irq_muic_handler(int state)
         printk("[MUIC] %s vbus_state = %d \n",__func__,state);
         if (state == 2)
         {
-            if (muic_mode == MUIC_NONE) schedule_work(&muic_wq);;
+            //if (muic_mode == MUIC_NONE) schedule_work(&muic_wq);
+            if (muic_mode == MUIC_NONE) schedule_work(&muic_wq.work); // 20120213 taeju.park@lge.com To delete compile warning, incompatible types
         }
         else
         {
-            if (muic_mode != MUIC_NONE) schedule_work(&muic_wq);;
+            //if (muic_mode != MUIC_NONE) schedule_work(&muic_wq);        
+            if (muic_mode != MUIC_NONE) schedule_work(&muic_wq.work); // 20120213 taeju.park@lge.com To delete compile warning, incompatible types
         }
     }
     printk("[MUIC] %s completed \n",__func__);
@@ -1121,7 +1143,10 @@ DEVICE_ATTR(wake_lock, 0664, NULL, muic_store_wake_lock);
  * muic_probe() is called in the middle of booting sequence due to '__init'.
  * '__init' causes muic_probe() to be released after the booting.
  */
-static s32 __init muic_probe(struct i2c_client *client, const struct i2c_device_id *id){
+
+// kibum.lee@lge.com section mismatch error fix
+//static s32 __init muic_probe(struct i2c_client *client, const struct i2c_device_id *id){
+static s32 muic_probe(struct i2c_client *client, const struct i2c_device_id *id){
 
 	s32 ret = 0;
 	u32 retry_no = 0;
@@ -1180,7 +1205,12 @@ static s32 __init muic_probe(struct i2c_client *client, const struct i2c_device_
 		printk(KERN_INFO "[MUIC] GPIO %d MUIC_INT_N direction initialization failed!\n", MUIC_INT_GPIO);
 		return -ENOSYS;
 	}
-
+//[[UBIQUIX_CHANGE_START, 0120419, hrgo@ubiquix.com, For AP/CP switching
+	gpio_direction_output(DP3T_IN_1_GPIO, 0);
+	gpio_direction_output(DP3T_IN_2_GPIO, 0);
+	gpio_direction_output(USIF_IN_1_GPIO, 0);
+	gpio_direction_output(IFX_VBUS_EN, 0);
+//UBIQUIX_CHANGE_START, 0120419, hrgo@ubiquix.com, For AP/CP switching]]
 	/* Register MUIC work queue function */
 	INIT_DELAYED_WORK(&muic_wq, muic_wq_func);
 

@@ -8,11 +8,11 @@
  * Copyright (C) 2009 Nokia.
  *
  * Contributors:
- * 	Sameer Venkatraman <sameerv@ti.com>
- * 	Mohit Jalori
- * 	Sergio Aguirre <saaguirre@ti.com>
- * 	Sakari Ailus <sakari.ailus@nokia.com>
- * 	Tuukka Toivonen <tuukka.o.toivonen@nokia.com>
+ *	Sameer Venkatraman <sameerv@ti.com>
+ *	Mohit Jalori
+ *	Sergio Aguirre <saaguirre@ti.com>
+ *	Sakari Ailus <sakari.ailus@nokia.com>
+ *	Tuukka Toivonen <tuukka.o.toivonen@nokia.com>
  *
  * This package is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -31,7 +31,7 @@
 #include <linux/device.h>
 #include <linux/videodev2.h>
 
-#include <asm/io.h>
+#include <linux/io.h>
 
 #include <plat/iommu.h>
 #include <plat/iovmm.h>
@@ -65,12 +65,12 @@ struct isp_pipeline;
 						 */
 #define NUM_BUFS		VIDEO_MAX_FRAME
 
-#define ISP_REVISION_2_0            0x20
-#define ISP_REVISION_2_1            0x21
-#define ISP_REVISION_RAPXXX         0xF0
+#define ISP_REVISION_2_0	0x20
+#define ISP_REVISION_2_1	0x21
+#define ISP_REVISION_RAPXXX	0xF0
 
 #define ISP_BYTES_PER_PIXEL		2
-#define NUM_ISP_CAPTURE_FORMATS 	(sizeof(isp_formats) /		\
+#define NUM_ISP_CAPTURE_FORMATS		(sizeof(isp_formats) /		\
 					 sizeof(isp_formats[0]))
 
 #define to_isp_device(ptr_module)				\

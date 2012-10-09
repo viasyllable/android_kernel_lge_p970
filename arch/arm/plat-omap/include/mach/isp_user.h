@@ -66,13 +66,18 @@ struct omap34xxcam_sensor_info {
 
 /* Boolean control used to force CSI2->MEM datapath on pipeline calculation */
 #define V4L2_CID_PRIVATE_OMAP3ISP_CSI2MEM	(V4L2_CID_PRIVATE_BASE + 0)
+
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2012.03.27] - CAM from GB
 /* Boolean control used to toggle Hynix secondary camera */
-#define V4L2_CID_PRIVATE_OMAP3ISP_HYNIX_SMART_CAMERA   (V4L2_CID_PRIVATE_BASE + 1)
+#define V4L2_CID_PRIVATE_OMAP3ISP_HYNIX_SMART_CAMERA	(V4L2_CID_PRIVATE_BASE + 1)
 /* Boolean control used to toggle Hynix secondary camera in Video Telephony mode */
-#define V4L2_CID_PRIVATE_OMAP3ISP_HYNIX_SMART_CAMERA_VT        (V4L2_CID_PRIVATE_BASE + 2)
+#define V4L2_CID_PRIVATE_OMAP3ISP_HYNIX_SMART_CAMERA_VT	(V4L2_CID_PRIVATE_BASE + 2)
 /* Boolean control used to toggle Continuous Capture */
 #define V4L2_CID_PRIVATE_OMAP3ISP_CONTINUOUS_CAPTURE (V4L2_CID_PRIVATE_BASE + 3)
 
+/* Boolean control used to toggle Hynix secondary camera in Video Telephony mode */
+#define V4L2_CID_PRIVATE_OMAP3ISP_APTINA_SUB_VR	(V4L2_CID_PRIVATE_BASE + 10)
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2012.03.27] - CAM from GB
 /* AE/AWB related structures and flags*/
 
 /* Flags for update field */
@@ -363,7 +368,7 @@ struct af_configuration {
 
 /* Abstraction layer CCDC configurations */
 #define ISP_ABS_CCDC_ALAW		(1 << 0)
-#define ISP_ABS_CCDC_LPF 		(1 << 1)
+#define ISP_ABS_CCDC_LPF		(1 << 1)
 #define ISP_ABS_CCDC_BLCLAMP		(1 << 2)
 #define ISP_ABS_CCDC_BCOMP		(1 << 3)
 #define ISP_ABS_CCDC_FPC		(1 << 4)
@@ -534,16 +539,16 @@ struct ispccdc_update_config {
 #define ISP_ABS_PREV_YC_LIMIT		(1 << 9)
 #define ISP_ABS_PREV_DEFECT_COR		(1 << 10)
 #define ISP_ABS_PREV_GAMMABYPASS	(1 << 11)
-#define ISP_ABS_TBL_NF 			(1 << 12)
+#define ISP_ABS_TBL_NF			(1 << 12)
 #define ISP_ABS_TBL_REDGAMMA		(1 << 13)
 #define ISP_ABS_TBL_GREENGAMMA		(1 << 14)
 #define ISP_ABS_TBL_BLUEGAMMA		(1 << 15)
 
 /* Features list */
 #define PREV_AVERAGER			(1 << 0)
-#define PREV_INVERSE_ALAW 		(1 << 1)
+#define PREV_INVERSE_ALAW		(1 << 1)
 #define PREV_HORZ_MEDIAN_FILTER		(1 << 2)
-#define PREV_NOISE_FILTER 		(1 << 3)
+#define PREV_NOISE_FILTER		(1 << 3)
 #define PREV_CFA			(1 << 4)
 #define PREV_GAMMA_BYPASS		(1 << 5)
 #define PREV_LUMA_ENHANCE		(1 << 6)

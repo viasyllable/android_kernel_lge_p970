@@ -8,7 +8,7 @@
  * Copyright (C) 2009 Nokia.
  *
  * Contributors:
- * 	Tuukka Toivonen <tuukka.o.toivonen@nokia.com>
+ *	Tuukka Toivonen <tuukka.o.toivonen@nokia.com>
  *	Thara Gopinath <thara@ti.com>
  *	Sergio Aguirre <saaguirre@ti.com>
  *
@@ -1421,7 +1421,7 @@
 #define ISPCSI2_COMPLEXIO_CFG1_PWR_AUTO_ENABLE		\
 	(0x1 << ISPCSI2_COMPLEXIO_CFG1_PWR_AUTO_SHIFT)
 
-#define ISPCSI2_COMPLEXIO_CFG1_DATA_POL_SHIFT(n) 	(3 + ((n) * 4))
+#define ISPCSI2_COMPLEXIO_CFG1_DATA_POL_SHIFT(n)	(3 + ((n) * 4))
 #define ISPCSI2_COMPLEXIO_CFG1_DATA_POL_MASK(n) \
 	(0x1 << ISPCSI2_COMPLEXIO_CFG1_DATA_POL_SHIFT(n))
 #define ISPCSI2_COMPLEXIO_CFG1_DATA_POL_PN(n) \

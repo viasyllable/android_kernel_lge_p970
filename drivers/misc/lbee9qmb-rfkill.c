@@ -1,6 +1,7 @@
 /*
  * Bluetooth+WiFi Murata LBEE19QMBC rfkill power control via GPIO
  *
+ * Copyright (C) 2012 LGE Inc.
  * Copyright (C) 2010 NVIDIA Corporation
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -19,71 +20,146 @@
  *
  */
 
+#define DEBUG	1
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/gpio.h>
 #include <linux/rfkill.h>
 #include <linux/delay.h>
-#include <linux/regulator/consumer.h>
 #include <linux/platform_device.h>
-#include <linux/lbee9qmb-rfkill.h>
-
-#ifdef BRCM_LPM
 #include <linux/irq.h>
 #include <linux/interrupt.h>
 #include <linux/wakelock.h>
 #include <linux/spinlock.h>
+#include <linux/io.h>
+#include <linux/slab.h>
+#include <linux/lbee9qmb-rfkill.h>
+#include <linux/mutex.h>
 
-#define BRCM_WAKELOCKTIMEOUT
+#define CHECK_HOST_WAKE_ON_RESUME	1
+
+#define BT_HOST_WAKELOCK_TIMEOUT	(5*HZ)
 
 struct bcm_bt_lpm {
-	unsigned int gpio_host_wake;
+	struct device *dev;
 
-	int wake;
+	struct rfkill *rfkill;
+	struct rfkill *rfkill_btwake;
+
+	int gpio_bt_wake;
+	int gpio_host_wake;
+	int gpio_reset;
+	int reset_delay;
+	int active_low;
+
+	int irq;
+
+	int bt_wake;
 	int host_wake;
-	int host_wake_irq;
+	spinlock_t slock;
+	struct mutex mlock;
+	struct wake_lock wake_lock;
+	int (*chip_enable)(void);
+	int (*chip_disable)(void);
 
-	spinlock_t bt_lock;
-	unsigned long bt_lock_flags;
-	struct work_struct host_wake_work;
+	int blocked; /* 0: on, 1: off */
+};
 
-	struct wake_lock bt_wake_lock;
-	struct wake_lock host_wake_lock;
-} bt_lpm;
-#endif
+#ifdef CONFIG_BRCM_HOST_WAKE
+static void update_host_wake_locked(void *data)
+{
+	struct bcm_bt_lpm *lpm = data;
+	int h_wake;
+
+	h_wake = gpio_get_value(lpm->gpio_host_wake);
+
+	dev_dbg(lpm->dev, "%s: host_wake %d\n", __func__, h_wake);
+
+	if (h_wake == lpm->host_wake)
+		return;
+
+	lpm->host_wake = h_wake;
+
+	if(lpm->active_low){
+		if (!h_wake) {
+			dev_dbg(lpm->dev, "%s: Call wake_lock_timeout\n", __func__);
+			wake_lock_timeout(&lpm->wake_lock,
+					BT_HOST_WAKELOCK_TIMEOUT);
+		}
+	}
+	else {
+		if (h_wake) {
+			dev_dbg(lpm->dev, "%s: Call wake_lock_timeout\n", __func__);
+			wake_lock_timeout(&lpm->wake_lock,
+					BT_HOST_WAKELOCK_TIMEOUT);
+		}
+	}
+}
+
+static irqreturn_t host_wake_isr(int irq, void *data)
+{
+	struct bcm_bt_lpm *lpm = data;
+	unsigned long flags;
+	int h_wake;
+
+	h_wake = gpio_get_value(lpm->gpio_host_wake);
+	irq_set_irq_type(irq, h_wake? IRQF_TRIGGER_LOW : IRQF_TRIGGER_HIGH);
+
+	dev_dbg(lpm->dev, "%s\n", __func__);
+
+	spin_lock_irqsave(&lpm->slock, flags);
+	update_host_wake_locked(lpm);
+	spin_unlock_irqrestore(&lpm->slock, flags);
+	return IRQ_HANDLED;
+}
+#endif /* CONFIG_BRCM_HOST_WAKE */
+
 static int lbee9qmb_rfkill_set_power(void *data, bool blocked)
 {
-	struct platform_device *pdev = data;
-	struct lbee9qmb_platform_data *plat = pdev->dev.platform_data;
+	struct bcm_bt_lpm *lpm = data;
 
-/* 20100721 jaewoo56.lee@lge.com for BTLA Porting to Froyo [START] */
-#if 0
-	struct regulator *regulator;
+	if (!lpm)
+		return -ENODEV;
 
-	regulator = regulator_get(&pdev->dev, "Vdd");
+	dev_dbg(lpm->dev, "%s: enabled=%d\n", __func__, !blocked);
 
-	if (IS_ERR(regulator)) {
-		dev_err(&pdev->dev, "Unable to get regulator Vdd\n");
-		return PTR_ERR(regulator);
-	}
-#endif
-/* 20100721 jaewoo56.lee@lge.com for BTLA Porting to Froyo [END] */
-
-	if (!blocked) {
-//		regulator_enable(regulator); /* 20100721 jaewoo56.lee@lge.com for BTLA Porting to Froyo */
-		//gpio_set_value(plat->gpio_reset, 0);
-//		if (plat->gpio_pwr!=-1)
-//			gpio_set_value(plat->gpio_pwr, 0);
-		msleep(plat->delay);
-//		if (plat->gpio_pwr!=-1)
-//			gpio_set_value(plat->gpio_pwr, 1);
-		gpio_set_value(plat->gpio_reset, 1);
-	} else {
-		gpio_set_value(plat->gpio_reset, 0);
-//		regulator_disable(regulator); /* 20100721 jaewoo56.lee@lge.com for BTLA Porting to Froyo */
+	mutex_lock(&lpm->mlock);
+	if (lpm->blocked == blocked) {
+		mutex_unlock(&lpm->mlock);
+		dev_dbg(lpm->dev, "%s: new setting is ignored(already set)\n",
+				__func__);
+		return 0;
 	}
 
-//	regulator_put(regulator); /* 20100721 jaewoo56.lee@lge.com for BTLA Porting to Froyo */
+	lpm->blocked = blocked;
+
+	if (blocked) {
+		/* LGE_SJIT 11/18/2011 [mohamed.khadri@lge.com] BT UART Disable*/
+		if (lpm->chip_disable) {
+			if (lpm->chip_disable())
+				dev_err(lpm->dev, "%s: uart disable failed\n",
+						__func__);
+		}
+		gpio_set_value(lpm->gpio_reset, 0);
+		dev_dbg(lpm->dev, "%s: reset low\n", __func__);
+	}
+	else {
+		/* LGE_SJIT 11/18/2011 [mohamed.khadri@lge.com] BT UART Enable*/
+		if (lpm->chip_enable) {
+			if (lpm->chip_enable())
+				dev_err(lpm->dev, "%s: uart enable failed\n",
+						__func__);
+		}
+		gpio_set_value(lpm->gpio_reset, 0);
+		dev_dbg(lpm->dev, "%s: reset low\n", __func__);
+		msleep(lpm->reset_delay);
+		gpio_set_value(lpm->gpio_reset, 1);
+		dev_dbg(lpm->dev, "%s: reset high\n", __func__);
+		msleep(lpm->reset_delay);
+	}
+	mutex_unlock(&lpm->mlock);
+
 	return 0;
 }
 
@@ -91,285 +167,335 @@ static struct rfkill_ops lbee9qmb_rfkill_ops = {
 	.set_block = lbee9qmb_rfkill_set_power,
 };
 
-static int lbee9qmb_rfkill_probe(struct platform_device *pdev)
+#ifdef CONFIG_BRCM_BT_WAKE
+static int lbee9qmb_rfkill_set_btwake(void *data, bool wake)
 {
-	struct lbee9qmb_platform_data *plat = pdev->dev.platform_data;
-	struct rfkill *rfkill;
+	struct bcm_bt_lpm *lpm = data;
+	int b_wake, h_wake;
 
-	int rc;
+	if (!lpm)
+		return -ENODEV;
 
-	if (!plat) {
-		dev_err(&pdev->dev, "no platform data\n");
-		return -ENOSYS;
-	}
+	if(lpm->bt_wake == wake)
+		return 0;
 
-	rc = gpio_request(plat->gpio_reset, "lbee9qmb_reset");
-	if (rc < 0) {
-		dev_err(&pdev->dev, "gpio_request failed\n");
-		return rc;
-	}
-	/*if (plat->gpio_pwr!=-1)
-	{
-		rc = gpio_request(plat->gpio_pwr, "lbee9qmb_pwr");
-		gpio_direction_output(plat->gpio_pwr,0);
-	}*/
+	b_wake = gpio_get_value(lpm->gpio_bt_wake);
+#ifdef CONFIG_BRCM_HOST_WAKE
+	h_wake = gpio_get_value(lpm->gpio_host_wake);
+#endif
 
-	rfkill = rfkill_alloc("lbee9qmb-rfkill", &pdev->dev,
-			RFKILL_TYPE_BLUETOOTH, &lbee9qmb_rfkill_ops, pdev);
-	if (!rfkill) {
-		rc = -ENOMEM;
-		goto fail_gpio;
-	}
-	platform_set_drvdata(pdev, rfkill);
-	gpio_direction_output(plat->gpio_reset, 0);
-	
-	rc = rfkill_register(rfkill);
-	if (rc < 0)
-		goto fail_alloc;
+	dev_dbg(lpm->dev, "%s: wake %d\n", __func__, wake);
+	dev_dbg(lpm->dev, "%s: bt_wake %d\n", __func__, b_wake);
+#ifdef CONFIG_BRCM_HOST_WAKE
+	dev_dbg(lpm->dev, "%s: host_wake %d\n", __func__, h_wake);
+#endif
 
-	return 0;
+	lpm->bt_wake = wake;
 
-fail_alloc:
-	rfkill_destroy(rfkill);
-fail_gpio:
-	gpio_free(plat->gpio_reset);
-//	if (plat->gpio_pwr!=-1)
-//		gpio_free(plat->gpio_pwr);
-	return rc;
+	if (wake) {
+		gpio_set_value(lpm->gpio_bt_wake, 1);
 		
-}
-
-static int lbee9qmb_rfkill_remove(struct platform_device *pdev)
-{
-	struct lbee9qmb_platform_data *plat = pdev->dev.platform_data;
-	struct rfkill *rfkill = platform_get_drvdata(pdev);
-
-	rfkill_unregister(rfkill);
-	rfkill_destroy(rfkill);
-	gpio_free(plat->gpio_reset);
-//	if (plat->gpio_pwr!=-1)
-//		gpio_free(plat->gpio_pwr);
-	return 0;
-	
-}
-
-static struct platform_driver lbee9qmb_rfkill_driver = {
-	.probe = lbee9qmb_rfkill_probe,
-	.remove = lbee9qmb_rfkill_remove,
-	.driver = {
-		.name = "lbee9qmb-rfkill",
-		.owner = THIS_MODULE,
-	},
-};
-
-#ifdef BRCM_HOST_WAKE
-static void update_host_wake_locked(int host_wake)
-{
-	if (host_wake == bt_lpm.host_wake)
-		return;
+		if (lpm->active_low)
+			wake_unlock(&lpm->wake_lock);
+		else
+			wake_lock(&lpm->wake_lock);
+	}
+	else {
+		gpio_set_value(lpm->gpio_bt_wake, 0);
 		
-	bt_lpm.host_wake = host_wake;
-
-	printk(KERN_ERR "BRCM_LPM: wake lock HOST_WAKE host=%d, bt=%d\n",host_wake,bt_lpm.wake);
-	if (host_wake)
-	{
-		wake_lock(&bt_lpm.host_wake_lock);
+		if (lpm->active_low)		
+			wake_lock(&lpm->wake_lock);
+		else
+			wake_unlock(&lpm->wake_lock);
 	}
-	else
-	{
-		wake_unlock(&bt_lpm.host_wake_lock);
-	}
-}
 
-static irqreturn_t host_wake_isr(int irq, void *dev)
-{
-	int host_wake;
+	b_wake = gpio_get_value(lpm->gpio_bt_wake);
+	h_wake = gpio_get_value(lpm->gpio_host_wake);
 
-	host_wake = gpio_get_value(bt_lpm.gpio_host_wake);
-
-#ifdef BRCM_WAKELOCKTIMEOUT
-	printk(KERN_ERR "BRCM_LPM: host_wake_isr schedule\n");
-	schedule_work(&bt_lpm.host_wake_work);
-	return IRQ_HANDLED;
+	dev_dbg(lpm->dev, "%s: bt_wake %d\n", __func__, b_wake);
+#ifdef CONFIG_BRCM_HOST_WAKE
+	dev_dbg(lpm->dev, "%s: host_wake %d\n", __func__, h_wake);
 #endif
-
-//	spin_lock_irqsave(&bt_lpm.bt_lock, bt_lpm.bt_lock_flags);
-//We need disable the irq here
-
-	printk(KERN_ERR "BRCM_LPM: host_wake_isr host wake=%d\n",host_wake);
-	set_irq_type(bt_lpm.host_wake_irq, host_wake ? IRQF_TRIGGER_LOW : IRQF_TRIGGER_HIGH);
-	schedule_work(&bt_lpm.host_wake_work);
-
-	return IRQ_HANDLED;
-}
-
-static void brcm_host_wake_work_func(struct work_struct *ignored)
-{
-	int host_wake;
-
-	host_wake = gpio_get_value(bt_lpm.gpio_host_wake);
-
-#ifdef BRCM_WAKELOCKTIMEOUT
-	printk(KERN_ERR "BRCM_LPM: BRCM_WAKELOCKTIMEOUT host wake=%d\n",host_wake);
-	wake_lock_timeout(&bt_lpm.host_wake_lock, 5*HZ);
-	return;
-#endif
-	update_host_wake_locked(host_wake);
-}
-#endif
-
-#ifdef BRCM_BT_WAKE
-static int lbee9qmb_rfkill_set_btwake(void *data, bool blocked)
-{
-	struct platform_device *pdev = data;
-	struct lbee9qmb_platform_data *plat = pdev->dev.platform_data;
-
-      if(bt_lpm.wake==blocked)
-        return 0;
-      bt_lpm.wake=blocked;
-        
-	printk(KERN_ERR "BRCM_LPM: wake gpio = %x blocked=%d \n",plat->gpio_btwake,blocked);
-
-	if (blocked) {
-		gpio_set_value(plat->gpio_btwake, 1);
-	} else {
-		gpio_set_value(plat->gpio_btwake, 0);
-	}
-
-	printk(KERN_ERR "BRCM_LPM: wake lock BT_WAKE host=%d, bt=%d\n",bt_lpm.host_wake,bt_lpm.wake);
-	if (bt_lpm.wake)
-	{
-		wake_lock(&bt_lpm.bt_wake_lock);
-	}
-	else
-	{
-		wake_unlock(&bt_lpm.bt_wake_lock);
-	}
 	return 0;
 }
 
 static struct rfkill_ops lbee9qmb_rfkill_btwake_ops = {
 	.set_block = lbee9qmb_rfkill_set_btwake,
 };
+#endif /* CONFIG_BRCM_BT_WAKE */
 
-static int lbee9qmb_rfkill_btwake_probe(struct platform_device *pdev)
+static int lbee9qmb_rfkill_probe(struct platform_device *pdev)
 {
-	struct lbee9qmb_platform_data *plat = pdev->dev.platform_data;
-	struct rfkill *rfkill;
+	struct lbee9qmb_platform_data *pdata = pdev->dev.platform_data;
+	struct bcm_bt_lpm *lpm;
 
 	int rc;
-	int irq;
-	int ret;
-	int host_wake;
-
-	if (!plat) {
+	
+	dev_dbg(&pdev->dev, "%s\n", __func__);
+	
+	if (!pdata) {
 		dev_err(&pdev->dev, "no platform data\n");
 		return -ENOSYS;
 	}
-	
-	wake_lock_init(&bt_lpm.bt_wake_lock, WAKE_LOCK_SUSPEND,
-				"bt_wake");
-#ifdef BRCM_HOST_WAKE
-	wake_lock_init(&bt_lpm.host_wake_lock, WAKE_LOCK_SUSPEND,
-				"host_wake");
-	bt_lpm.gpio_host_wake=plat->gpio_hostwake;
-	//spin_lock_init(&bt_lpm.bt_lock);
-	INIT_WORK(&bt_lpm.host_wake_work, brcm_host_wake_work_func);
-#endif
 
-	rc = gpio_request(plat->gpio_btwake, "lbee9qmb_reset_btwake");
-	if (rc < 0) {
-		dev_err(&pdev->dev, "gpio_request failed\n");
-		return rc;
-	}
-
-	rfkill = rfkill_alloc("lbee9qmb-rfkill_btwake", &pdev->dev,
-			RFKILL_TYPE_BLUETOOTH, &lbee9qmb_rfkill_btwake_ops, pdev);
-	if (!rfkill) {
+	lpm = kzalloc(sizeof(struct bcm_bt_lpm), GFP_KERNEL);
+	if (!lpm) {
+		dev_err(&pdev->dev, "could not allocate memory\n");
 		rc = -ENOMEM;
-		goto fail_gpio;
+		goto err_kzalloc;
 	}
-	platform_set_drvdata(pdev, rfkill);
-	gpio_direction_output(plat->gpio_btwake, 1);
-	
-	rc = rfkill_register(rfkill);
-	if (rc < 0)
-		goto fail_alloc;
 
-#ifdef BRCM_HOST_WAKE
-	rc = gpio_request(plat->gpio_hostwake, "lbee9qmb_reset_hostwake");
-	gpio_direction_input(plat->gpio_hostwake);
-	host_wake=gpio_get_value(bt_lpm.gpio_host_wake);
-	irq = gpio_to_irq(plat->gpio_hostwake);
-	bt_lpm.host_wake_irq=irq;
-#ifdef BRCM_WAKELOCKTIMEOUT
-	set_irq_type(irq, IRQ_TYPE_EDGE_RISING);
-	
-	ret = request_irq(irq, host_wake_isr, 0,
-			"bt host_wake", NULL);
-#else
-	ret = request_irq(irq, host_wake_isr, IRQF_TRIGGER_HIGH,
-			"bt host_wake", NULL);
-#endif			
-			enable_irq_wake(irq);
-	
-	printk(KERN_ERR "BRCM_LPM: irq=%d ret=%d HOST_WAKE=%d\n",irq,ret,host_wake);
+	lpm->gpio_reset = pdata->gpio_reset;
+#ifdef CONFIG_BRCM_BT_WAKE
+	lpm->gpio_bt_wake = pdata->gpio_btwake;
+	lpm->active_low = pdata->active_low;
+#endif
+#ifdef CONFIG_BRCM_HOST_WAKE
+	lpm->gpio_host_wake = pdata->gpio_hostwake;
+#endif
+	lpm->reset_delay = pdata->delay;
+	lpm->blocked = -1; /* will be off */
+
+	if (pdata->chip_enable)
+		lpm->chip_enable = pdata->chip_enable;
+	if (pdata->chip_disable)
+		lpm->chip_disable = pdata->chip_disable;
+	lpm->dev = &pdev->dev;
+
+	/* request gpios */
+	rc = gpio_request(pdata->gpio_reset, "bt_reset");
+	if (rc < 0) {
+		dev_err(&pdev->dev, "gpio_request(bt_reset) failed\n");
+		goto err_gpio_bt_reset;
+	}
+#ifdef CONFIG_BRCM_BT_WAKE
+	rc = gpio_request(pdata->gpio_btwake, "bt_wake");
+	if (rc < 0) {
+		dev_err(&pdev->dev, "gpio_request(bt_wake) failed\n");
+		goto err_gpio_bt_wake;
+	}
+#endif
+#ifdef CONFIG_BRCM_HOST_WAKE
+	rc = gpio_request(pdata->gpio_hostwake, "host_wake");
+	if (rc < 0) {
+		dev_err(&pdev->dev, "gpio_request(bt_hostwake) failed\n");
+		goto err_gpio_host_wake;
+	}
 #endif
 
+	/* mutex */
+	mutex_init(&lpm->mlock);
+
+	/* wakelock init */
+	wake_lock_init(&lpm->wake_lock, WAKE_LOCK_SUSPEND, "BTLowPower");
+
+	lpm->rfkill = rfkill_alloc("lbee9qmb-rfkill", &pdev->dev,
+			RFKILL_TYPE_BLUETOOTH, &lbee9qmb_rfkill_ops, lpm);
+	if (!lpm->rfkill) {
+		rc = -ENOMEM;
+		dev_err(&pdev->dev, "%s: rfkill_alloc failed\n", __func__);
+		goto err_rfkill;
+	}
+
+	rc = rfkill_register(lpm->rfkill);
+	if (rc < 0) {
+		dev_err(&pdev->dev, "%s: rfkill_register failed\n", __func__);
+		goto err_rfkill_register;
+	}
+
+#ifdef CONFIG_BRCM_BT_WAKE
+	lpm->rfkill_btwake = rfkill_alloc("lbee9qmb-rfkill_btwake", &pdev->dev,
+			RFKILL_TYPE_BLUETOOTH, &lbee9qmb_rfkill_btwake_ops, lpm);
+	if (!lpm->rfkill_btwake) {
+		rc = -ENOMEM;
+		dev_err(&pdev->dev, "%s: rfkill_alloc(btwake) failed\n", __func__);
+		goto err_rfkill_btwake;
+	}
+
+	rc = rfkill_register(lpm->rfkill_btwake);
+	if (rc < 0) {
+		dev_err(&pdev->dev, "%s: rfkill_register(btwake) failed\n", __func__);
+		goto err_rfkill_btwake_register;
+	}
+#endif
+	platform_set_drvdata(pdev, lpm);
+
+	gpio_direction_output(pdata->gpio_reset, 0);
+#ifdef CONFIG_BRCM_BT_WAKE
+	if (lpm->active_low)
+		gpio_direction_output(pdata->gpio_btwake, 1);
+	else
+		gpio_direction_output(pdata->gpio_btwake, 0);
+#endif
+#ifdef CONFIG_BRCM_HOST_WAKE
+	spin_lock_init(&lpm->slock);
+
+	gpio_direction_input(pdata->gpio_hostwake);
+	lpm->irq = gpio_to_irq(pdata->gpio_hostwake);
+
+	rc = request_irq(lpm->irq, host_wake_isr,
+			lpm->active_low ? IRQF_TRIGGER_LOW : IRQF_TRIGGER_HIGH,
+			"bt host_wake", lpm);
+	if (rc < 0) {
+		dev_err(&pdev->dev, "%s: request_irq failed\n", __func__);
+		goto err_request_irq;
+	}
+	enable_irq_wake(lpm->irq);
+#endif
+
+	/* bt chip off on booting */
+	lbee9qmb_rfkill_set_power(lpm, 1);
+	/* sync with internal rfkill state */
+	rfkill_set_states(lpm->rfkill, 1, 0);
+
+	dev_info(&pdev->dev, "%s: probed\n", __func__);
 	return 0;
 
-fail_alloc:
-	rfkill_destroy(rfkill);
-fail_gpio:
-	gpio_free(plat->gpio_btwake);
-
+#ifdef CONFIG_BRCM_HOST_WAKE
+err_request_irq:
+#endif
+#ifdef CONFIG_BRCM_BT_WAKE
+	rfkill_unregister(lpm->rfkill_btwake);
+err_rfkill_btwake_register:
+	rfkill_destroy(lpm->rfkill_btwake);
+err_rfkill_btwake:
+#endif
+	rfkill_unregister(lpm->rfkill);
+err_rfkill_register:
+	rfkill_destroy(lpm->rfkill);
+err_rfkill:
+	wake_lock_destroy(&lpm->wake_lock);
+#ifdef CONFIG_BRCM_HOST_WAKE
+	gpio_free(pdata->gpio_hostwake);
+err_gpio_host_wake:
+#endif
+#ifdef CONFIG_BRCM_BT_WAKE
+	gpio_free(pdata->gpio_btwake);
+err_gpio_bt_wake:
+#endif
+	gpio_free(pdata->gpio_reset);
+err_gpio_bt_reset:
+	kfree(lpm);
+err_kzalloc:
 	return rc;
-		
 }
 
-static int lbee9qmb_rfkill_btwake_remove(struct platform_device *pdev)
+static int lbee9qmb_rfkill_remove(struct platform_device *pdev)
 {
-	struct lbee9qmb_platform_data *plat = pdev->dev.platform_data;
-	struct rfkill *rfkill = platform_get_drvdata(pdev);
+	struct bcm_bt_lpm *lpm = platform_get_drvdata(pdev);
 
-	rfkill_unregister(rfkill);
-	rfkill_destroy(rfkill);
-	gpio_free(plat->gpio_btwake);
-	wake_lock_destroy(&bt_lpm.bt_wake_lock);
-#ifdef BRCM_HOST_WAKE
-	wake_lock_destroy(&bt_lpm.host_wake_lock);
+	dev_dbg(&pdev->dev, "%s\n", __func__);
+
+#ifdef CONFIG_BRCM_HOST_WAKE
+	free_irq(lpm->irq, lpm);
 #endif
-//	if (plat->gpio_pwr!=-1)
-//		gpio_free(plat->gpio_pwr);
+#ifdef CONFIG_BRCM_BT_WAKE
+	rfkill_unregister(lpm->rfkill_btwake);
+	rfkill_destroy(lpm->rfkill_btwake);
+#endif
+	rfkill_unregister(lpm->rfkill);
+	rfkill_destroy(lpm->rfkill);
+	wake_lock_destroy(&lpm->wake_lock);
+#ifdef CONFIG_BRCM_HOST_WAKE
+	gpio_free(lpm->gpio_host_wake);
+#endif
+#ifdef CONFIG_BRCM_BT_WAKE
+	gpio_free(lpm->gpio_bt_wake);
+#endif
+	gpio_free(lpm->gpio_reset);
+
+	kfree(lpm);
+
 	return 0;
-	
 }
 
-static struct platform_driver lbee9qmb_rfkill_btwake_driver = {
-	.probe = lbee9qmb_rfkill_btwake_probe,
-	.remove = lbee9qmb_rfkill_btwake_remove,
+static int lbee9qmb_rfkill_suspend(struct platform_device *pdev,
+		pm_message_t state)
+{
+	struct bcm_bt_lpm *lpm = platform_get_drvdata(pdev);
+	int v;
+	int wake;
+	int ret = 0;
+
+	if (!lpm->blocked) {
+#ifdef CONFIG_BRCM_HOST_WAKE
+		disable_irq(lpm->irq);
+		v = gpio_get_value(lpm->gpio_host_wake);
+
+		if (lpm->active_low)
+			wake = !v;
+		else
+			wake = v;
+
+		if (wake) {
+			dev_warn(&pdev->dev, "host waked\n");
+			ret = -EBUSY;
+			goto failed;
+		}
+#endif
+
+		/* disable uart to sleep */
+		if (lpm->chip_disable) {
+			ret = lpm->chip_disable();
+			if (ret < 0) {
+				dev_warn(&pdev->dev, "failed uart disabe\n");
+				goto failed;
+			}
+		}
+	}
+	return 0;
+
+failed:
+#ifdef CONFIG_BRCM_HOST_WAKE
+	enable_irq(lpm->irq);
+#endif
+	return ret;
+}
+
+static int lbee9qmb_rfkill_resume(struct platform_device *pdev)
+{
+	struct bcm_bt_lpm *lpm = platform_get_drvdata(pdev);
+	unsigned long flags;
+
+
+	if (!lpm->blocked) {
+		/* re-enable uart */
+		if (lpm->chip_enable) {
+			if (lpm->chip_enable()) {
+				dev_err(&pdev->dev, "failed uart enable\n");
+			}
+		}
+#ifdef CONFIG_BRCM_HOST_WAKE
+#ifdef CHECK_HOST_WAKE_ON_RESUME
+		spin_lock_irqsave(&lpm->slock, flags);
+		update_host_wake_locked(lpm);
+		spin_unlock_irqrestore(&lpm->slock, flags);
+#endif
+
+		enable_irq(lpm->irq);
+#endif
+	}
+	return 0;
+}
+
+static struct platform_driver lbee9qmb_rfkill_driver = {
+	.probe = lbee9qmb_rfkill_probe,
+	.remove = lbee9qmb_rfkill_remove,
+	.suspend = lbee9qmb_rfkill_suspend,
+	.resume = lbee9qmb_rfkill_resume,
 	.driver = {
-		.name = "lbee9qmb-rfkill_btwake",
+		.name = "lbee9qmb-rfkill",
 		.owner = THIS_MODULE,
 	},
 };
-#endif
 
 static int __init lbee9qmb_rfkill_init(void)
 {
-#ifdef BRCM_BT_WAKE
-	platform_driver_register(&lbee9qmb_rfkill_driver);
-	return platform_driver_register(&lbee9qmb_rfkill_btwake_driver);
-#else
 	return platform_driver_register(&lbee9qmb_rfkill_driver);
-#endif
 }
 
 static void __exit lbee9qmb_rfkill_exit(void)
 {
-#ifdef BRCM_BT_WAKE
-	platform_driver_unregister(&lbee9qmb_rfkill_btwake_driver);
-#endif
 	platform_driver_unregister(&lbee9qmb_rfkill_driver);
 }
 
@@ -377,5 +503,5 @@ module_init(lbee9qmb_rfkill_init);
 module_exit(lbee9qmb_rfkill_exit);
 
 MODULE_DESCRIPTION("Murata LBEE9QMBC rfkill");
-MODULE_AUTHOR("NVIDIA");
+MODULE_AUTHOR("NVIDIA/LGE");
 MODULE_LICENSE("GPL");

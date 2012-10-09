@@ -141,7 +141,32 @@ exit:
 	return ret;
 }
 
-u32 fm_rx_seek(struct fmdev *fmdev, u32 seek_upward, u32 wrap_around)
+static u32 fm_rx_set_channel_spacing(struct fmdev *fmdev, u32 spacing)
+{
+	u16 payload;
+	u32 ret;
+
+	if (spacing > 0 && spacing <= 50000)
+		spacing = FM_CHANNEL_SPACING_50KHZ;
+	else if (spacing > 50000 && spacing <= 100000)
+		spacing = FM_CHANNEL_SPACING_100KHZ;
+	else
+		spacing = FM_CHANNEL_SPACING_200KHZ;
+
+	/* set channel spacing */
+	payload = spacing;
+	ret = fmc_send_cmd(fmdev, SCAN_SPACING_SET, REG_WR, &payload,
+			sizeof(payload), NULL, NULL);
+	if (ret < 0)
+		return ret;
+
+	fmdev->rx.region.chanl_space = spacing * FM_FREQ_MUL;
+
+	return ret;
+}
+
+u32 fm_rx_seek(struct fmdev *fmdev, u32 seek_upward,
+		u32 wrap_around, u32 spacing)
 {
 	u32 resp_len;
 	u16 curr_frq, next_frq, last_frq;
@@ -149,6 +174,13 @@ u32 fm_rx_seek(struct fmdev *fmdev, u32 seek_upward, u32 wrap_around)
 	u16 offset, space_idx;
 	unsigned long timeleft;
 	u32 ret;
+
+	/* Set channel spacing */
+	ret = fm_rx_set_channel_spacing(fmdev, spacing);
+	if (ret < 0) {
+		fmerr("Failed to set channel spacing\n");
+		return ret;
+	}
 
 	/* Read the current frequency from chip */
 	ret = fmc_send_cmd(fmdev, FREQ_SET, REG_RD, NULL,
@@ -277,7 +309,6 @@ u32 fm_rx_set_volume(struct fmdev *fmdev, u16 vol_to_set)
 			   FM_RX_VOLUME_MIN, FM_RX_VOLUME_MAX);
 		return -EINVAL;
 	}
-	vol_to_set *= FM_RX_VOLUME_GAIN_STEP;
 
 	payload = vol_to_set;
 	ret = fmc_send_cmd(fmdev, VOLUME_SET, REG_WR, &payload,
@@ -300,7 +331,7 @@ u32 fm_rx_get_volume(struct fmdev *fmdev, u16 *curr_vol)
 		return -ENOMEM;
 	}
 
-	*curr_vol = fmdev->rx.volume / FM_RX_VOLUME_GAIN_STEP;
+	*curr_vol = fmdev->rx.volume;
 
 	return 0;
 }
@@ -517,7 +548,7 @@ u32 fm_rx_set_rssi_threshold(struct fmdev *fmdev, short rssi_lvl_toset)
 		fmerr("Invalid RSSI threshold level\n");
 		return -EINVAL;
 	}
-	payload = (u16)rssi_lvl_toset;
+	payload = (u16) rssi_lvl_toset;
 	ret = fmc_send_cmd(fmdev, SEARCH_LVL_SET, REG_WR, &payload,
 			sizeof(payload), NULL, NULL);
 	if (ret < 0)

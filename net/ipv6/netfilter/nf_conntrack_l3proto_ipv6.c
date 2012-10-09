@@ -396,4 +396,3 @@ static void __exit nf_conntrack_l3proto_ipv6_fini(void)
 
 module_init(nf_conntrack_l3proto_ipv6_init);
 module_exit(nf_conntrack_l3proto_ipv6_fini);
-

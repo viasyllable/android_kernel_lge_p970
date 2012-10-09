@@ -37,49 +37,11 @@
 static struct video_device *gradio_dev;
 static u8 radio_disconnected;
 
-/* Query control */
-static struct v4l2_queryctrl fmdrv_v4l2_queryctrl[] = {
-	{
-		.id = V4L2_CID_AUDIO_VOLUME,
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.name = "Volume",
-		.minimum = FM_RX_VOLUME_MIN,
-		.maximum = FM_RX_VOLUME_MAX,
-		.step = 1,
-		.default_value = FM_DEFAULT_RX_VOLUME,
-	},
-	{
-		.id = V4L2_CID_AUDIO_BALANCE,
-		.flags = V4L2_CTRL_FLAG_DISABLED,
-	},
-	{
-		.id = V4L2_CID_AUDIO_BASS,
-		.flags = V4L2_CTRL_FLAG_DISABLED,
-	},
-	{
-		.id = V4L2_CID_AUDIO_TREBLE,
-		.flags = V4L2_CTRL_FLAG_DISABLED,
-	},
-	{
-		.id = V4L2_CID_AUDIO_MUTE,
-		.type = V4L2_CTRL_TYPE_BOOLEAN,
-		.name = "Mute",
-		.minimum = 0,
-		.maximum = 2,
-		.step = 1,
-		.default_value = FM_MUTE_OFF,
-	},
-	{
-		.id = V4L2_CID_AUDIO_LOUDNESS,
-		.flags = V4L2_CTRL_FLAG_DISABLED,
-	},
-};
-
 /* -- V4L2 RADIO (/dev/radioX) device file operation interfaces --- */
 
 /* Read RX RDS data */
 static ssize_t fm_v4l2_fops_read(struct file *file, char __user * buf,
-		size_t count, loff_t *ppos)
+					size_t count, loff_t *ppos)
 {
 	u8 rds_mode;
 	int ret;
@@ -143,6 +105,114 @@ static u32 fm_v4l2_fops_poll(struct file *file, struct poll_table_struct *pts)
 	return 0;
 }
 
+/**********************************************************************/
+/* functions called from sysfs subsystem */
+
+static ssize_t show_af(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+	struct fmdev *fmdev = dev_get_drvdata(dev);
+
+	return sprintf(buf,"%d\n",fmdev->rx.af_mode);
+}
+
+static ssize_t store_af(struct device *dev,
+                struct device_attribute *attr, char *buf, size_t size)
+{
+	int ret;
+	unsigned long af_mode;
+	struct fmdev *fmdev = dev_get_drvdata(dev);
+
+	if (strict_strtoul(buf, 0, &af_mode))
+		return -EINVAL;
+
+	if (af_mode < 0 || af_mode > 1)
+		return -EINVAL;
+
+	ret = fm_rx_set_af_switch(fmdev, af_mode);
+	if (ret < 0) {
+		fmerr("Failed to set AF Switch\n");
+		return ret;
+	}
+
+	return size;
+}
+
+static ssize_t show_band(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+	struct fmdev *fmdev = dev_get_drvdata(dev);
+
+	return sprintf(buf,"%d\n",fmdev->rx.region.fm_band);
+}
+
+static ssize_t store_band(struct device *dev,
+                struct device_attribute *attr, char *buf, size_t size)
+{
+	int ret;
+	unsigned long fm_band;
+	struct fmdev *fmdev = dev_get_drvdata(dev);
+
+	if (strict_strtoul(buf, 0, &fm_band))
+		return -EINVAL;
+
+	if (fm_band < 0 || fm_band > 1)
+		return -EINVAL;
+
+	ret = fm_rx_set_region(fmdev, fm_band);
+	if (ret < 0) {
+		fmerr("Failed to set FM Band\n");
+		return ret;
+	}
+
+	return size;
+}
+
+static ssize_t show_rssi_lvl(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+	struct fmdev *fmdev = dev_get_drvdata(dev);
+
+	return sprintf(buf,"%d\n",fmdev->rx.rssi_threshold);
+}
+static ssize_t store_rssi_lvl(struct device *dev,
+                struct device_attribute *attr, char *buf, size_t size)
+{
+	int ret;
+	unsigned long rssi_lvl;
+	struct fmdev *fmdev = dev_get_drvdata(dev);
+
+	if (strict_strtoul(buf, 0, &rssi_lvl))
+		return -EINVAL;
+
+	ret = fm_rx_set_rssi_threshold(fmdev, rssi_lvl);
+	if (ret < 0) {
+		fmerr("Failed to set RSSI level\n");
+		return ret;
+	}
+
+	return size;
+}
+
+/* structures specific for sysfs entries */
+static struct kobj_attribute v4l2_fm_rds_af =
+__ATTR(fm_rds_af, 0666, (void *)show_af, (void *)store_af);
+
+static struct kobj_attribute v4l2_fm_band =
+__ATTR(fm_band, 0666, (void *)show_band, (void *)store_band);
+
+static struct kobj_attribute v4l2_fm_rssi_lvl =
+__ATTR(fm_rssi_lvl, 0666, (void *) show_rssi_lvl, (void *)store_rssi_lvl);
+
+static struct attribute *v4l2_fm_attrs[] = {
+	&v4l2_fm_rds_af.attr,
+	&v4l2_fm_band.attr,
+	&v4l2_fm_rssi_lvl.attr,
+	NULL,
+};
+static struct attribute_group v4l2_fm_attr_grp = {
+	.attrs = v4l2_fm_attrs,
+};
 /*
  * Handle open request for "/dev/radioX" device.
  * Start with FM RX mode as default.
@@ -175,6 +245,12 @@ static int fm_v4l2_fops_open(struct file *file)
 	}
 	radio_disconnected = 1;
 
+	/* Register sysfs entries */
+	ret = sysfs_create_group(&fmdev->radio_dev->dev.kobj, &v4l2_fm_attr_grp);
+	if (ret) {
+		pr_err("failed to create sysfs entries");
+		return ret;
+	}
 	return ret;
 }
 
@@ -194,6 +270,8 @@ static int fm_v4l2_fops_release(struct file *file)
 		fmerr("Unable to turn off the chip\n");
 		return ret;
 	}
+
+	sysfs_remove_group(&fmdev->radio_dev->dev.kobj, &v4l2_fm_attr_grp);
 
 	ret = fmc_release(fmdev);
 	if (ret < 0) {
@@ -222,114 +300,79 @@ static int fm_v4l2_vidioc_querycap(struct file *file, void *priv,
 	return 0;
 }
 
-static int fm_v4l2_vidioc_queryctrl(struct file *file, void *priv,
-		struct v4l2_queryctrl *qc)
+static int fm_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 {
-	int index;
-	int ret = -EINVAL;
-
-	if (qc->id < V4L2_CID_BASE)
-		return ret;
-
-	/* Search control ID and copy its properties */
-	for (index = 0; index < NO_OF_ENTRIES_IN_ARRAY(fmdrv_v4l2_queryctrl);\
-			index++) {
-		if (qc->id && qc->id == fmdrv_v4l2_queryctrl[index].id) {
-			memcpy(qc, &(fmdrv_v4l2_queryctrl[index]), sizeof(*qc));
-			ret = 0;
-			break;
-		}
-	}
-	return ret;
-}
-
-static int fm_v4l2_vidioc_g_ctrl(struct file *file, void *priv,
-		struct v4l2_control *ctrl)
-{
-	int ret = -EINVAL;
-	unsigned short curr_vol;
-	unsigned char curr_mute_mode;
-	struct fmdev *fmdev;
-
-	fmdev = video_drvdata(file);
+	struct fmdev *fmdev = container_of(ctrl->handler,
+			struct fmdev, ctrl_handler);
 
 	switch (ctrl->id) {
-	case V4L2_CID_AUDIO_MUTE:	/* get mute mode */
-		ret = fm_rx_get_mute_mode(fmdev, &curr_mute_mode);
-		if (ret < 0)
-			return ret;
-		ctrl->value = curr_mute_mode;
-		break;
-
-	case V4L2_CID_AUDIO_VOLUME:	/* get volume */
-		ret = fm_rx_get_volume(fmdev, &curr_vol);
-		if (ret < 0)
-			return ret;
-		ctrl->value = curr_vol;
-		break;
-
 	case  V4L2_CID_TUNE_ANTENNA_CAPACITOR:
-		ctrl->value = fm_tx_get_tune_cap_val(fmdev);
+		ctrl->cur.val = fm_tx_get_tune_cap_val(fmdev);
 		break;
-
-	case V4L2_CID_TUNE_PREEMPHASIS:
-		ctrl->value = fmdev->tx_data.preemph;
+	default:
+		fmwarn("%s: Unknown IOCTL: %d\n", __func__, ctrl->id);
 		break;
 	}
 
-	return ret;
+	return 0;
 }
 
-/*
- * Change the value of specified control.
- * V4L2_CID_TUNE_POWER_LEVEL: Application will specify power level value in
- * units of dB/uV, whereas range and step are specific to FM chip. For TI's WL
- * chips, convert application specified power level value to chip specific
- * value by subtracting 122 from it. Refer to TI FM data sheet for details.
- **/
-static int fm_v4l2_vidioc_s_ctrl(struct file *file, void *priv,
-		struct v4l2_control *ctrl)
+static int fm_v4l2_s_ctrl(struct v4l2_ctrl *ctrl)
 {
-	struct fmdev *fmdev = video_drvdata(file);
-	unsigned int emph_filter;
-	int ret = -EINVAL;
+	struct fmdev *fmdev = container_of(ctrl->handler,
+			struct fmdev, ctrl_handler);
+
+	int ret;
 
 	switch (ctrl->id) {
-	case V4L2_CID_AUDIO_MUTE:	/* set mute */
-		ret = fmc_set_mute_mode(fmdev, (unsigned char)ctrl->value);
-		break;
-
 	case V4L2_CID_AUDIO_VOLUME:	/* set volume */
-		ret = fm_rx_set_volume(fmdev, (unsigned short)ctrl->value);
-		break;
+		return fm_rx_set_volume(fmdev, (u16)ctrl->val);
 
-	case V4L2_CID_TUNE_POWER_LEVEL: /* set TX power level - ext control */
-		if (ctrl->value >= FM_PWR_LVL_LOW &&
-			ctrl->value <= FM_PWR_LVL_HIGH) {
-			ctrl->value = FM_PWR_LVL_HIGH - ctrl->value;
-			ret = fm_tx_set_pwr_lvl(fmdev,
-					(unsigned char)ctrl->value);
-		} else
-			ret = -ERANGE;
-		break;
+	case V4L2_CID_AUDIO_MUTE:	/* set mute */
+		return fmc_set_mute_mode(fmdev, (u8)ctrl->val);
+
+	case V4L2_CID_TUNE_POWER_LEVEL:
+		/* set TX power level - ext control */
+		return fm_tx_set_pwr_lvl(fmdev, (u8)ctrl->val);
 
 	case V4L2_CID_TUNE_PREEMPHASIS:
-		if (ctrl->value < V4L2_PREEMPHASIS_DISABLED ||
-				ctrl->value > V4L2_PREEMPHASIS_75_uS) {
-			ret = -EINVAL;
-			break;
-		}
-		if (ctrl->value == V4L2_PREEMPHASIS_DISABLED)
-			emph_filter = FM_TX_PREEMPH_OFF;
-		else if (ctrl->value == V4L2_PREEMPHASIS_50_uS)
-			emph_filter = FM_TX_PREEMPH_50US;
-		else
-			emph_filter = FM_TX_PREEMPH_75US;
-		ret = fm_tx_set_preemph_filter(fmdev, emph_filter);
-		break;
-	}
+		return fm_tx_set_preemph_filter(fmdev, (u8) ctrl->val);
 
-	return ret;
+	case V4L2_CID_RDS_TX_PI:
+		ret = set_rds_picode(fmdev, ctrl->val);
+		if (ret < 0) {
+			fmerr("Failed to set RDS Radio PS Name\n");
+			return ret;
+		}
+		return 0;
+
+	case V4L2_CID_RDS_TX_PTY:
+		ret = set_rds_pty(fmdev, ctrl->val);
+		if (ret < 0) {
+			fmerr("Failed to set RDS Radio PS Name\n");
+			return ret;
+		}
+		return 0;
+
+	case V4L2_CID_RDS_TX_PS_NAME:
+		ret = fm_tx_set_radio_text(fmdev, ctrl->string, 1);
+		if (ret < 0) {
+			fmerr("Failed to set RDS Radio PS Name\n");
+			return ret;
+		}
+		return 0;
+
+	case V4L2_CID_RDS_TX_RADIO_TEXT:
+		ret = fm_tx_set_radio_text(fmdev, ctrl->string, 2);
+		if (ret < 0) {
+			fmerr("Failed to set RDS Radio Text\n");
+			return ret;
+		}
+		return 0;
+
+	default:
+		return -EINVAL;
+	}
 }
 
 static int fm_v4l2_vidioc_g_audio(struct file *file, void *priv,
@@ -499,59 +542,13 @@ static int fm_v4l2_vidioc_s_hw_freq_seek(struct file *file, void *priv,
 		}
 	}
 
-	ret = fm_rx_seek(fmdev, seek->seek_upward, seek->wrap_around);
+	ret = fm_rx_seek(fmdev, seek->seek_upward, seek->wrap_around,
+			seek->spacing);
 	if (ret < 0)
 		fmerr("RX seek failed - %d\n", ret);
 
 	return ret;
 }
-
-static int fm_v4l2_vidioc_g_ext_ctrls(struct file *file, void *priv,
-		struct v4l2_ext_controls *ext_ctrls)
-{
-	struct v4l2_control ctrl;
-	int index;
-	int ret = -EINVAL;
-
-	if (V4L2_CTRL_CLASS_FM_TX == ext_ctrls->ctrl_class) {
-		for (index = 0; index < ext_ctrls->count; index++) {
-			ctrl.id = ext_ctrls->controls[index].id;
-			ctrl.value = ext_ctrls->controls[index].value;
-			ret = fm_v4l2_vidioc_g_ctrl(file, priv, &ctrl);
-			if (ret < 0) {
-				ext_ctrls->error_idx = index;
-				break;
-			}
-			ext_ctrls->controls[index].value = ctrl.value;
-		}
-	}
-
-	return ret;
-}
-
-static int fm_v4l2_vidioc_s_ext_ctrls(struct file *file, void *priv,
-		struct v4l2_ext_controls *ext_ctrls)
-{
-	struct v4l2_control ctrl;
-	int index;
-	int ret = -EINVAL;
-
-	if (V4L2_CTRL_CLASS_FM_TX == ext_ctrls->ctrl_class) {
-		for (index = 0; index < ext_ctrls->count; index++) {
-			ctrl.id = ext_ctrls->controls[index].id;
-			ctrl.value = ext_ctrls->controls[index].value;
-			ret = fm_v4l2_vidioc_s_ctrl(file, priv, &ctrl);
-			if (ret < 0) {
-				ext_ctrls->error_idx = index;
-				break;
-			}
-			ext_ctrls->controls[index].value = ctrl.value;
-		}
-	}
-
-	return ret;
-}
-
 /* Get modulator attributes. If mode is not TX, return no attributes. */
 static int fm_v4l2_vidioc_g_modulator(struct file *file, void *priv,
 		struct v4l2_modulator *mod)
@@ -565,12 +562,12 @@ static int fm_v4l2_vidioc_g_modulator(struct file *file, void *priv,
 		return -EPERM;
 
 	mod->txsubchans = ((fmdev->tx_data.aud_mode == FM_STEREO_MODE) ?
-			V4L2_TUNER_SUB_STEREO : V4L2_TUNER_SUB_MONO) |
-		((fmdev->tx_data.rds.flag == FM_RDS_ENABLE) ?
-		 V4L2_TUNER_SUB_RDS : 0);
+				V4L2_TUNER_SUB_STEREO : V4L2_TUNER_SUB_MONO) |
+				((fmdev->tx_data.rds.flag == FM_RDS_ENABLE) ?
+				V4L2_TUNER_SUB_RDS : 0);
 
 	mod->capability = V4L2_TUNER_CAP_STEREO | V4L2_TUNER_CAP_RDS |
-		V4L2_TUNER_CAP_LOW;
+				V4L2_TUNER_CAP_LOW;
 
 	return 0;
 }
@@ -596,14 +593,15 @@ static int fm_v4l2_vidioc_s_modulator(struct file *file, void *priv,
 	}
 
 	aud_mode = (mod->txsubchans & V4L2_TUNER_SUB_STEREO) ?
-		FM_STEREO_MODE : FM_MONO_MODE;
+			FM_STEREO_MODE : FM_MONO_MODE;
 	rds_mode = (mod->txsubchans & V4L2_TUNER_SUB_RDS) ?
-		FM_RDS_ENABLE : FM_RDS_DISABLE;
+			FM_RDS_ENABLE : FM_RDS_DISABLE;
 	ret = fm_tx_set_stereo_mono(fmdev, aud_mode);
 	if (ret < 0) {
 		fmerr("Failed to set mono/stereo mode for TX\n");
 		return ret;
 	}
+
 	ret = fm_tx_set_rds_mode(fmdev, rds_mode);
 	if (ret < 0)
 		fmerr("Failed to set rds mode for TX\n");
@@ -616,18 +614,17 @@ static const struct v4l2_file_operations fm_drv_fops = {
 	.read = fm_v4l2_fops_read,
 	.write = fm_v4l2_fops_write,
 	.poll = fm_v4l2_fops_poll,
-	.ioctl = video_ioctl2,
+	.unlocked_ioctl = video_ioctl2,
 	.open = fm_v4l2_fops_open,
 	.release = fm_v4l2_fops_release,
 };
 
+static const struct v4l2_ctrl_ops fm_ctrl_ops = {
+	.s_ctrl = fm_v4l2_s_ctrl,
+	.g_volatile_ctrl = fm_g_volatile_ctrl,
+};
 static const struct v4l2_ioctl_ops fm_drv_ioctl_ops = {
 	.vidioc_querycap = fm_v4l2_vidioc_querycap,
-	.vidioc_queryctrl = fm_v4l2_vidioc_queryctrl,
-	.vidioc_g_ctrl = fm_v4l2_vidioc_g_ctrl,
-	.vidioc_s_ctrl = fm_v4l2_vidioc_s_ctrl,
-	.vidioc_g_ext_ctrls = fm_v4l2_vidioc_g_ext_ctrls,
-	.vidioc_s_ext_ctrls = fm_v4l2_vidioc_s_ext_ctrls,
 	.vidioc_g_audio = fm_v4l2_vidioc_g_audio,
 	.vidioc_s_audio = fm_v4l2_vidioc_s_audio,
 	.vidioc_g_tuner = fm_v4l2_vidioc_g_tuner,
@@ -649,6 +646,12 @@ static struct video_device fm_viddev_template = {
 
 int fm_v4l2_init_video_device(struct fmdev *fmdev, int radio_nr)
 {
+	struct v4l2_ctrl *ctrl;
+	int ret;
+
+	/* Init mutex for core locking */
+	mutex_init(&fmdev->mutex);
+
 	/* Allocate new video device */
 	gradio_dev = video_device_alloc();
 	if (NULL == gradio_dev) {
@@ -661,6 +664,8 @@ int fm_v4l2_init_video_device(struct fmdev *fmdev, int radio_nr)
 
 	video_set_drvdata(gradio_dev, fmdev);
 
+	gradio_dev->lock = &fmdev->mutex;
+
 	/* Register with V4L2 subsystem as RADIO device */
 	if (video_register_device(gradio_dev, VFL_TYPE_RADIO, radio_nr)) {
 		video_device_release(gradio_dev);
@@ -670,6 +675,54 @@ int fm_v4l2_init_video_device(struct fmdev *fmdev, int radio_nr)
 
 	fmdev->radio_dev = gradio_dev;
 
+	/* Register to v4l2 ctrl handler framework */
+	fmdev->radio_dev->ctrl_handler = &fmdev->ctrl_handler;
+
+	ret = v4l2_ctrl_handler_init(&fmdev->ctrl_handler, 5);
+	if (ret < 0) {
+		fmerr("(fmdev): Can't init ctrl handler\n");
+		v4l2_ctrl_handler_free(&fmdev->ctrl_handler);
+		return -EBUSY;
+	}
+
+	/*
+	 * Following controls are handled by V4L2 control framework.
+	 * Added in ascending ID order.
+	 */
+	v4l2_ctrl_new_std(&fmdev->ctrl_handler, &fm_ctrl_ops,
+			V4L2_CID_AUDIO_VOLUME, FM_RX_VOLUME_MIN,
+			FM_RX_VOLUME_MAX, 1, FM_RX_VOLUME_MAX);
+
+	v4l2_ctrl_new_std(&fmdev->ctrl_handler, &fm_ctrl_ops,
+			V4L2_CID_AUDIO_MUTE, 0, 1, 1, 0);
+
+	v4l2_ctrl_new_std(&fmdev->ctrl_handler, &fm_ctrl_ops,
+			V4L2_CID_RDS_TX_PI, 0x0, 0xffff, 1, 0x0);
+
+	v4l2_ctrl_new_std(&fmdev->ctrl_handler, &fm_ctrl_ops,
+			V4L2_CID_RDS_TX_PTY, 0, 32, 1, 0);
+
+	v4l2_ctrl_new_std(&fmdev->ctrl_handler, &fm_ctrl_ops,
+			V4L2_CID_RDS_TX_PS_NAME, 0, 0xffff, 1, 0);
+
+	v4l2_ctrl_new_std(&fmdev->ctrl_handler, &fm_ctrl_ops,
+			V4L2_CID_RDS_TX_RADIO_TEXT, 0, 0xffff, 1, 0);
+
+	v4l2_ctrl_new_std_menu(&fmdev->ctrl_handler, &fm_ctrl_ops,
+			V4L2_CID_TUNE_PREEMPHASIS, V4L2_PREEMPHASIS_75_uS,
+			0, V4L2_PREEMPHASIS_75_uS);
+
+	v4l2_ctrl_new_std(&fmdev->ctrl_handler, &fm_ctrl_ops,
+			V4L2_CID_TUNE_POWER_LEVEL, FM_PWR_LVL_LOW,
+			FM_PWR_LVL_HIGH, 1, FM_PWR_LVL_HIGH);
+
+	ctrl = v4l2_ctrl_new_std(&fmdev->ctrl_handler, &fm_ctrl_ops,
+			V4L2_CID_TUNE_ANTENNA_CAPACITOR, 0,
+			255, 1, 255);
+
+	if (ctrl)
+		ctrl->is_volatile = 1;
+
 	return 0;
 }
 
@@ -677,7 +730,11 @@ void *fm_v4l2_deinit_video_device(void)
 {
 	struct fmdev *fmdev;
 
+
 	fmdev = video_get_drvdata(gradio_dev);
+
+	/* Unregister to v4l2 ctrl handler framework*/
+	v4l2_ctrl_handler_free(&fmdev->ctrl_handler);
 
 	/* Unregister RADIO device from V4L2 subsystem */
 	video_unregister_device(gradio_dev);

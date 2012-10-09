@@ -26,15 +26,16 @@
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <mach/sil9022.h>
+#include <linux/slab.h>
 
-#include <plat/display.h>
+#include <video/omapdss.h>
 #include <plat/io.h>
 #include <plat/omap-pm.h>
-#include <linux/slab.h>
 
 u16 current_descriptor_addrs;
 
 static struct i2c_client *sil9022_client;
+
 
 static struct omap_video_timings omap_dss_hdmi_timings = {
 	.x_res          = HDMI_XRES,
@@ -51,15 +52,15 @@ static struct omap_video_timings omap_dss_hdmi_timings = {
 static struct hdmi_reg_data  hdmi_tpi_audio_config_data[] = {
 	/* Transmitter is brought to Full operation when value of power
 	 * state register is 0x0 */
-	{ HDMI_TPI_POWER_STATE_CTRL_REG, TPI_AVI_POWER_STATE_D0		},
+	{ HDMI_TPI_POWER_STATE_CTRL_REG, TPI_AVI_POWER_STATE_D0		 },
 	/* TMDS output lines active. bit 3 1:TMDS inactive, 0: TMDS active */
-	{ HDMI_SYS_CTRL_DATA_REG,  0x01					},
+	{ HDMI_SYS_CTRL_DATA_REG,	0x01				},
 	/*HDCP Enable - Disable */
 	{ HDMI_TPI_HDCP_CONTROLDATA_REG, 0				},
 	/* I2S mode , Mute Enabled , PCM */
 	{ HDMI_TPI_AUDIO_CONFIG_BYTE2_REG, TPI_AUDIO_INTERFACE_I2S |
 					    TPI_AUDIO_MUTE_ENABLE |
-					    TPI_AUDIO_CODING_PCM	},
+					    TPI_AUDIO_CODING_PCM	 },
 	/* I2S Input configuration register */
 	{ HDMI_TPI_I2S_INPUT_CONFIG_REG, TPI_I2S_SCK_EDGE_RISING |
 					TPI_I2S_MCLK_MULTIPLIER_256 |
@@ -162,20 +163,20 @@ void get_horz_vert_timing_info(u8 *edid)
 				      edid[current_descriptor_addrs + 6]) -
 		(omap_dss_hdmi_timings.vfp + omap_dss_hdmi_timings.vsw);
 
-	dev_dbg(&sil9022_client->dev, "<%s>\n"
-				       "hfp			= %d\n"
-				       "hsw			= %d\n"
-				       "hbp			= %d\n"
-				       "vfp			= %d\n"
-				       "vsw			= %d\n"
-				       "vbp			= %d\n",
-		 __func__,
-		 omap_dss_hdmi_timings.hfp,
-		 omap_dss_hdmi_timings.hsw,
-		 omap_dss_hdmi_timings.hbp,
-		 omap_dss_hdmi_timings.vfp,
-		 omap_dss_hdmi_timings.vsw,
-		 omap_dss_hdmi_timings.vbp
+	dev_dbg(&sil9022_client->dev,	"<%s>\n"
+					"hfp			= %d\n"
+					"hsw			= %d\n"
+					"hbp			= %d\n"
+					"vfp			= %d\n"
+					"vsw			= %d\n"
+					"vbp			= %d\n",
+					__func__,
+					omap_dss_hdmi_timings.hfp,
+					omap_dss_hdmi_timings.hsw,
+					omap_dss_hdmi_timings.hbp,
+					omap_dss_hdmi_timings.vfp,
+					omap_dss_hdmi_timings.vsw,
+					omap_dss_hdmi_timings.vbp
 		 );
 
 }
@@ -371,7 +372,7 @@ sil9022_blockwrite_reg(struct i2c_client *client,
 		data[1] = val[i];
 		err = i2c_transfer(client->adapter, msg, 1);
 		udelay(50);
-		dev_err(&client->dev, "<%s> i2c Block write at 0x%x, "
+		dev_dbg(&client->dev, "<%s> i2c Block write at 0x%x, "
 				      "*val=%d flags=%d byte[%d] err=%d\n",
 			__func__, data[0], data[1], msg->flags, i, err);
 		if (err < 0)
@@ -481,7 +482,6 @@ retry:
 	data[1] = val;
 
 	err = i2c_transfer(client->adapter, msg, 1);
-
 	dev_dbg(&client->dev, "<%s> i2c write at=%x "
 			       "val=%x flags=%d err=%d\n",
 		__func__, data[0], data[1], msg->flags, err);
@@ -554,7 +554,7 @@ sil9022_read_reg(struct i2c_client *client, u16 data_length, u8 reg, u8 *val)
 			      "*val=%d flags=%d err=%d\n",
 		__func__, reg, *val, msg->flags, err);
 	return err;
- }
+}
 
 static int
 hdmi_read_edid(struct i2c_client *client, u16 len,
@@ -662,7 +662,6 @@ hdmi_read_edid(struct i2c_client *client, u16 len,
 	/* Release DDC bus access */
 	client->addr = SI9022_I2CSLAVEADDRESS;
 	val &= ~(TPI_SYS_CTRL_DDC_BUS_REQUEST | TPI_SYS_CTRL_DDC_BUS_GRANTED);
-
 	err = sil9022_write_reg(client, HDMI_SYS_CTRL_DATA_REG, val);
 
 	if (err < 0) {
@@ -831,15 +830,15 @@ hdmi_enable(struct omap_dss_device *dssdev)
 
 
 	dev_info(&sil9022_client->dev, "<%s>\nHDMI Monitor E-EDID Timing Data\n"
-					"horizontal_res	= %d\n"
-					"vertical_res	= %d\n"
-					"pixel_clk	= %d\n"
-					"hfp		= %d\n"
-					"hsw		= %d\n"
-					"hbp		= %d\n"
-					"vfp		= %d\n"
-					"vsw		= %d\n"
-					"vbp		= %d\n",
+				       "horizontal_res	= %d\n"
+				       "vertical_res	= %d\n"
+				       "pixel_clk	= %d\n"
+				       "hfp		= %d\n"
+				       "hsw		= %d\n"
+				       "hbp		= %d\n"
+				       "vfp		= %d\n"
+				       "vsw		= %d\n"
+				       "vbp		= %d\n",
 		 __func__,
 		 omap_dss_hdmi_timings.x_res,
 		 omap_dss_hdmi_timings.y_res,
@@ -968,7 +967,7 @@ hdmi_enable(struct omap_dss_device *dssdev)
 	}
 
 	/*  Read back TPI System Control Data to latch settings */
-	msleep(10);
+	msleep(20);
 	err = sil9022_read_reg(sil9022_client, 1, HDMI_SYS_CTRL_DATA_REG, &val);
 	if (err < 0) {
 		dev_err(&sil9022_client->dev,
@@ -1108,7 +1107,6 @@ static void hdmi_panel_remove(struct omap_dss_device *dssdev)
 static int hdmi_panel_enable(struct omap_dss_device *dssdev)
 {
 	int r = 0;
-
 #ifdef CONFIG_PM
 	struct hdmi_platform_data *pdata = dssdev->dev.platform_data;
 	if (pdata->set_min_bus_tput) {
@@ -1124,21 +1122,28 @@ static int hdmi_panel_enable(struct omap_dss_device *dssdev)
 						166 * 1000 * 4);
 	}
 #endif
+	r = omapdss_dpi_display_enable(dssdev);
+	if (r)
+		goto ERROR0;
 
 	if (dssdev->platform_enable)
 		r = dssdev->platform_enable(dssdev);
 
 	r = sil9022_set_cm_clkout_ctrl(sil9022_client);
 	if (r)
-		goto ERROR0;
+		goto ERROR1;
+
+	dssdev->state = OMAP_DSS_DISPLAY_ACTIVE;
 
 	r = hdmi_enable(dssdev);
 	if (r)
-		goto ERROR0;
+		goto ERROR1;
 	/* wait couple of vsyncs until enabling the LCD */
 	msleep(50);
 
 	return 0;
+ERROR1:
+	omapdss_dpi_display_disable(dssdev);
 ERROR0:
 	return r;
 }
@@ -1164,16 +1169,21 @@ static void hdmi_panel_disable(struct omap_dss_device *dssdev)
 			pdata->set_max_mpu_wakeup_lat(&sil9022_client->dev, -1);
 	}
 #endif
+	msleep(50);
+	omapdss_dpi_display_disable(dssdev);
+	dssdev->state = OMAP_DSS_DISPLAY_DISABLED;
 }
 
 static int hdmi_panel_suspend(struct omap_dss_device *dssdev)
 {
 	hdmi_panel_disable(dssdev);
+	dssdev->state = OMAP_DSS_DISPLAY_SUSPENDED;
 	return 0;
 }
 
 static int hdmi_panel_resume(struct omap_dss_device *dssdev)
 {
+	dssdev->state = OMAP_DSS_DISPLAY_ACTIVE;
 	return hdmi_panel_enable(dssdev);
 }
 
@@ -1205,19 +1215,15 @@ sil9022_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		goto ERROR0;
 	}
 	memset(sil9022_client, 0, sizeof(struct i2c_client));
-
 	strncpy(sil9022_client->name, SIL9022_DRV_NAME, I2C_NAME_SIZE);
 	sil9022_client->addr = SI9022_I2CSLAVEADDRESS;
 	sil9022_client->adapter = client->adapter;
 
 	i2c_set_clientdata(client, sil9022_client);
-
 	err = sil9022_set_cm_clkout_ctrl(client);
 	if (err)
 		goto ERROR1;
-
 	omap_dss_register_driver(&hdmi_driver);
-
 	return 0;
 ERROR1:
 	kfree(sil9022_client);
@@ -1263,21 +1269,18 @@ static int __init
 sil9022_init(void)
 {
 	int err = 0;
-
 	err = i2c_add_driver(&sil9022_driver);
 	if (err < 0) {
 		printk(KERN_ERR "<%s> Driver registration failed\n", __func__);
 		err = -ENODEV;
 		goto ERROR0;
 	}
-
 	if (sil9022_client == NULL) {
 		printk(KERN_ERR "<%s> sil9022_client not allocated,\n"
 				"<%s> No HDMI Device\n", __func__, __func__);
 		err = -ENODEV;
 		goto ERROR0;
 	}
-
 	return 0;
 ERROR0:
 	return err;
@@ -1289,13 +1292,14 @@ sil9022_exit(void)
 	i2c_del_driver(&sil9022_driver);
 }
 
-/*late_initcall(sil9022_init);*/
 module_init(sil9022_init);
 module_exit(sil9022_exit);
 
 MODULE_AUTHOR("Texas Instruments");
 MODULE_DESCRIPTION("SIL9022 HDMI Driver");
 MODULE_LICENSE("GPL");
+
+
 
 
 

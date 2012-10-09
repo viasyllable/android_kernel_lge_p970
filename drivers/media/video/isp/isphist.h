@@ -6,7 +6,7 @@
  * Copyright (C) 2009 Texas Instruments, Inc.
  *
  * Contributors:
- * 	David Cohen <david.cohen@nokia.com>
+ *	David Cohen <david.cohen@nokia.com>
  *	Sergio Aguirre <saaguirre@ti.com>
  *	Troy Laramy
  *

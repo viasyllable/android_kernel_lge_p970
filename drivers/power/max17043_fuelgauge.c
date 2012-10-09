@@ -32,6 +32,8 @@
 #endif
 #if defined(CONFIG_HUB_MUIC)
 #include "../hub/hub_muic.h"
+#elif defined(CONFIG_MUIC)
+#include <linux/muic/muic.h>
 #endif
 extern void charger_state_update_by_other(void);	// from twl4030_bci_battery.c
 #endif /* CONFIG_MACH_LGE_HUB || CONFIG_MACH_LGE_SNIPER */
@@ -388,7 +390,7 @@ static int max17043_update(struct i2c_client *client)
 		chip->capacity++;
 	if(chip->soc & 0x80)	// half up
 		chip->capacity++;
-
+	
 	if(chip->capacity > 100)
 		chip->capacity = 100;
 	else if(chip->capacity < 0)
@@ -448,7 +450,7 @@ static void max17043_alert_work(struct work_struct *work)
 		cancel_delayed_work_sync(&reference->work);	
 		schedule_delayed_work(&reference->work, MAX17043_WORK_DELAY);
 	}
-
+	
 	max17043_read_config(reference->client);
 	
 	max17043_update(reference->client);
@@ -459,6 +461,10 @@ static void max17043_alert_work(struct work_struct *work)
 
 #if defined(CONFIG_HUB_MUIC)
 	if(get_muic_mode() == MUIC_NONE)
+// kibum.lee@lge.com 20120502 MUIC re-work start
+#elif defined(CONFIG_MUIC)
+	if(muic_get_mode() == MUIC_NONE)
+// kibum.lee@lge.com 20120502 MUIC re-work end		
 #elif defined(CONFIG_LGE_OMAP3_EXT_PWR)
 	if ( 0 == get_external_power_status() )
 #else
@@ -593,6 +599,10 @@ int max17043_do_calibrate(void)
 
 #if defined(CONFIG_HUB_MUIC)
 	if(get_muic_mode() != MUIC_NONE)
+// kibum.lee@lge.com 20120502 MUIC re-work start
+#elif defined(CONFIG_MUIC)
+	if(muic_get_mode() != MUIC_NONE)
+// kibum.lee@lge.com 20120502 MUIC re-work end		
 #elif defined(CONFIG_LGE_OMAP3_EXT_PWR)
 	if ( 1 == get_external_power_status() )
 #else
@@ -602,7 +612,7 @@ int max17043_do_calibrate(void)
 		charging = 1;
 	}
 
-
+	
 	need_quickstart = max17043_need_quickstart(charging);
 
 	if(need_quickstart) {
@@ -723,7 +733,7 @@ static int __devinit max17043_probe(struct i2c_client *client,
 	max17043_read_config(client);
 
 	if(need_to_quickstart) {
-	max17043_set_rcomp(RCOMP_BL44JN);
+		max17043_set_rcomp(RCOMP_BL44JN);
 		max17043_quickstart(client);
 		schedule_delayed_work(&chip->work, HZ);
 		return 0;
@@ -852,6 +862,8 @@ static void __exit max17043_exit(void)
 }
 module_exit(max17043_exit);
 #endif
+
+module_init(max17043_init); //kibum.lee@lge.com
 
 MODULE_AUTHOR("LG Electronics");
 MODULE_DESCRIPTION("MAX17043 Fuel Gauge");

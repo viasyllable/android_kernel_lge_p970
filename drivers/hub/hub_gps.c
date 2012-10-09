@@ -112,7 +112,7 @@ static int hub_gps_gpio_probe(struct platform_device *pdev)
 		printk(KERN_ERR "hub_gps_gpio_probe: GPIO %d is already used!\n", GPIO_GPS_RESET_N);
 		return retval;
 	}
-	
+
 	retval = device_create_file(&pdev->dev, &dev_attr_reset);
 	if (retval)
 		goto error;
@@ -121,6 +121,12 @@ static int hub_gps_gpio_probe(struct platform_device *pdev)
 	if (retval)
 		goto error;
 
+  /* LGE_CHANGE_S, ericjs.kim@lge.com, 2011-05-08, after root -> system, fix for first try dead  */		
+	gpio_direction_output(GPIO_GPS_PWR_ON, 0);	 
+	gpio_direction_output(GPIO_GPS_RESET_N, 1);	
+	//gpio_direction_output(GPIO_GPS_RESET_N, 0);
+	/* LGE_CHANGE_E, ericjs.kim@lge.com, 2011-05-08, after root -> system, fix for first try dead  */	
+	
 	return 0;
 
 error:

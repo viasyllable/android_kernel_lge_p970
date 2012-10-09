@@ -73,7 +73,8 @@
 /*LGSI_GKPD_AT_CMD_snehal.shinde@lge.com_27_Aug_2011_Start*/
 #define GKPD_BUF_MAX		20		
 static unsigned int test_mode = 0;
-static int test_code, gkpd_state, gkpd_last_index = 0;
+static int test_code, gkpd_last_index = 0;
+//static int gkpd_state; // 20120213 taeju.park@lge.com To delete compile warning, unused variable.
 static unsigned char gkpd_value[GKPD_BUF_MAX+1];
 /*LGSI_GKPD_AT_CMD_snehal.shinde@lge.com_27_Aug_2011_End*/
 
@@ -410,7 +411,7 @@ static irqreturn_t do_kp_irq(int irq, void *_kp)
 			write_gkpd_value(kp->keymap[test_code]);	
 // 20100831 jh.koo@lge.com for TEST MODE [END_LGE]	
 /*LGSI_GKPD_AT_CMD_snehal.shinde@lge.com_08_Oct_2011_Start*/
-            }
+	}
 
 	return IRQ_HANDLED;
 }
@@ -471,7 +472,7 @@ static int __devinit twl4030_kp_program(struct twl4030_keypad *kp)
 // 20100727 jh.koo@lge.com for CP reset Pop up [START_LGE]
 extern void hub_reboot_device(void);
 extern char reset_mode;
-extern int hidden_reset_enabled; 
+extern int hidden_reset_enabled;
 //LGE_TELECA_JAVA_RIL_RECOVERY_264  -START
 //20110329, ramesh.chandrasekaran@teleca.com, RIL RECOVERY
 //Description: ISR for modem restart handling
@@ -496,10 +497,10 @@ static irqreturn_t hub_cp_int_handler(int irq, void *_kp)
 		input_sync(kp->input);
 	}
 #else
-      input_report_key(kp->input, KEY_PROG3, 1);
-      mdelay(10);
-      input_report_key(kp->input, KEY_PROG3, 0);
-      input_sync(kp->input);
+    input_report_key(kp->input, KEY_PROG3, 1);
+    mdelay(10);
+    input_report_key(kp->input, KEY_PROG3, 0);
+    input_sync(kp->input);
 #endif //20110317,suchul.lee@lge.com Request_Kill_RILD [END]
 	
 	return IRQ_HANDLED;

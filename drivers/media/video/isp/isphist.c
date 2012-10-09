@@ -576,9 +576,10 @@ int isp_hist_config(struct isp_hist_device *isp_hist,
 	int ret = 0;
 	unsigned int size;
 	int use_dma = HIST_USE_DMA;
-	const unsigned int size_bins[] =
-			{ HIST_MEM_SIZE_BINS(32), HIST_MEM_SIZE_BINS(64),
-			  HIST_MEM_SIZE_BINS(128), HIST_MEM_SIZE_BINS(256) };
+	const unsigned int size_bins[] = {
+			HIST_MEM_SIZE_BINS(32), HIST_MEM_SIZE_BINS(64),
+			HIST_MEM_SIZE_BINS(128), HIST_MEM_SIZE_BINS(256)
+		};
 
 	if (!histcfg) {
 		dev_dbg(dev, "hist: Null argument in configuration.\n");

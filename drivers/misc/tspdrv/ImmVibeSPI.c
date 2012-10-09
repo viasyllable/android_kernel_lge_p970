@@ -44,7 +44,11 @@
 #define 	NUM_ACTUATORS   	1
 
 #define 	VIB_DEBUG 		1
+#if defined(CONFIG_PRODUCT_LGE_LU6800)
+#undef     USE_SUBPM
+#else
 #define     USE_SUBPM 
+#endif
 
 static bool g_bAmpEnabled = false;
 
@@ -58,12 +62,11 @@ static bool g_bAmpEnabled = false;
 #define HUB_VIBE_PWM				56
 #define HUB_VIBE_GPTIMER_NUM		10
 
-#if 0
-#define PWM_DUTY_MAX	 1158 /*1158 /* 22.43 kHz */
-#endif
-#define PWM_DUTY_MAX	 96336
 
-#if 0
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-03-21, Change the PWM Clock Source (GB Source)*/
+//[LGE_CHANGE_S] seungmoon.lee@lge.com, 2012-02-29, enable USE_SYS_CLK in ICS source(it was disabled in GB source)
+#if 1
+//[LGE_CHANGE_E] seungmoon.lee@lge.com, 2012-02-29, enable USE_SYS_CLK in ICS source(it was disabled in GB source)
 #define USE_SYS_CLK
 #undef USE_32_CLK
 #else
@@ -71,8 +74,11 @@ static bool g_bAmpEnabled = false;
 #undef USE_SYS_CLK
 #endif // if 0
 
-#if 0
-#define PWM_DUTY_MAX	 1158 /*1158 /* 22.43 kHz */
+//[LGE_CHANGE_S] seungmoon.lee@lge.com, 2012-02-29, change PWM_DUTY_MAX as 1158 in ICS source(roll-back in ICS code)
+#if 1
+// #define PWM_DUTY_MAX	 1158  /*1158 /* 22.43 kHz */ 
+#define PWM_DUTY_MAX	 1158  /*1158 22.43 kHz */ // 20120213 taeju.park@lge.com To delete compile warning,  
+//[LGE_CHANGE_E] seungmoon.lee@lge.com, 2012-02-29, change PWM_DUTY_MAX as 1158 in ICS source(roll-back in ICS code)
 #else
 #ifdef USE_32_CLK
 #define PWM_DUTY_MAX	 0xAEFFFFFF//use 32k clock source ok
@@ -80,6 +86,7 @@ static bool g_bAmpEnabled = false;
 #define PWM_DUTY_MAX	 0x387638//use sys clock 26MHz source
 #endif // USE_32_CLK
 #endif // if 0
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-03-21, Change the PWM Clock Source (GB Source)*/
 
 
 #define PLTR_VALUE		(0xFFFFFFFF - PWM_DUTY_MAX)
@@ -87,11 +94,20 @@ static bool g_bAmpEnabled = false;
 static struct omap_dm_timer *omap_vibrator_timer = NULL;
 
 
+#define CLK_COUNT 38400000
+#define MOTOR_RESONANCE_HZ 227
+
+#define MOTOR_RESONANCE_COUTER_VALUE     (0xFFFFFFFE - ((CLK_COUNT/MOTOR_RESONANCE_HZ)/128))
+#define PWM_DUTY_MAX     ((CLK_COUNT/MOTOR_RESONANCE_HZ)/128)
+#define DUTY_HALF   (PWM_DUTY_MAX >> 1)
+
 #ifdef USE_SUBPM
 #if defined(CONFIG_REGULATOR_LP8720)
 extern void subpm_set_output(subpm_output_enum outnum, int onoff);
 extern void subpm_output_enable(void);
 #endif
+#else
+static struct regulator *vibe_regulator = NULL;
 #endif
 
 static void hub_vibrator_gpio_enable (int enable)
@@ -108,10 +124,17 @@ static void hub_vibrator_LDO_enable(int val)
 #ifdef USE_SUBPM
 	subpm_set_output(1, val);
 	subpm_output_enable();
+#else
+	if (val == 1){
+		regulator_enable(vibe_regulator);
+	}else{
+		regulator_disable(vibe_regulator);
+	}
 #endif
 }
 
-static void vib_enable(int on )
+// static void vib_enable(int on )
+static int vib_enable(int on ) // 20120213 taeju.park@lge.com To delete compile warning, not void return
 {
 	hub_vibrator_gpio_enable(on);
 	hub_vibrator_LDO_enable(on);
@@ -119,25 +142,31 @@ static void vib_enable(int on )
 	return VIBE_S_SUCCESS;
 }
 
-static void vib_generatePWM(int on)
+// static void vib_generatePWM(int on)
+static int vib_generatePWM(int on)  // 20120213 taeju.park@lge.com To delete compile warning, not void return
 {
+#if 0
 	if(on) {
 		/* Select clock */
 		omap_dm_timer_enable(omap_vibrator_timer);
 
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-03-21, Change the PWM Clock Source */
 #ifdef USE_32_CLK
 		omap_dm_timer_set_source(omap_vibrator_timer, OMAP_TIMER_SRC_32_KHZ);
 #else
 		omap_dm_timer_set_source(omap_vibrator_timer, OMAP_TIMER_SRC_SYS_CLK);
 #endif
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-03-21, Change the PWM Clock Source */
 
 		/* set a period */
 		omap_dm_timer_set_load(omap_vibrator_timer, 1, PLTR_VALUE);
 
 		/* set a duty */
 		omap_dm_timer_set_match(omap_vibrator_timer, 1, PWM_DUTY_HALF);
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-03-21, Change the PWM Clock Source */
 		omap_dm_timer_set_pwm(omap_vibrator_timer, 0, 1, OMAP_TIMER_TRIGGER_OVERFLOW_AND_COMPARE);
 		//omap_dm_timer_set_pwm(omap_vibrator_timer, 1, 1, OMAP_TIMER_TRIGGER_OVERFLOW_AND_COMPARE);
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-03-21, Change the PWM Clock Source */
 		omap_dm_timer_start(omap_vibrator_timer);		
 	}
 	else {
@@ -146,6 +175,19 @@ static void vib_generatePWM(int on)
 	}
 
 	return VIBE_S_SUCCESS;
+#else
+	if (on) {
+		omap_dm_timer_enable(omap_vibrator_timer);
+		omap_dm_timer_set_match(omap_vibrator_timer, 1, PWM_DUTY_HALF);
+		omap_dm_timer_set_pwm(omap_vibrator_timer, 0, 1, OMAP_TIMER_TRIGGER_OVERFLOW_AND_COMPARE);
+		omap_dm_timer_set_load_start(omap_vibrator_timer, 1, MOTOR_RESONANCE_COUTER_VALUE);
+	}
+	else {
+		omap_dm_timer_stop(omap_vibrator_timer);	
+		omap_dm_timer_disable(omap_vibrator_timer);
+	}
+#endif
+
 }
 
 
@@ -179,9 +221,16 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_AmpEnable( VibeUInt8 nActuatorIndex
 /* Called at initialization time to set PWM freq, disable amp, etc... */
 IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_Initialize( void)
 {
-	int status = 0;
+	// int status = 0; // 20120213 taeju.park@lge.com To delete compile warning, unused variable.
 	int ret = 0;
 	
+#if defined(CONFIG_PRODUCT_LGE_LU6800)
+	vibe_regulator = regulator_get(NULL, "vaux1");
+	if (vibe_regulator == NULL) {
+		printk("LGE: vaux1 regulator get fail\n");
+		return VIBE_E_FAIL;
+	}
+#endif
    	DbgOut(( "[ImmVibeSPI] : ImmVibeSPI_ForceOut_Initialize\n" ));
 	//g_bAmpEnabled = true;   /* to force ImmVibeSPI_ForceOut_AmpDisable disabling the amp */
 	ret = gpio_request(HUB_VIBE_GPIO_EN, "Hub Vibrator Enable");
@@ -195,6 +244,13 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_Initialize( void)
 		printk(KERN_ERR "%s: failed to request omap pwm timer.\n", __func__);
 		ret = -ENODEV;
 	}
+
+#ifdef USE_32_CLK
+		omap_dm_timer_set_source(omap_vibrator_timer, OMAP_TIMER_SRC_32_KHZ);
+#else
+		omap_dm_timer_set_source(omap_vibrator_timer, OMAP_TIMER_SRC_SYS_CLK);
+#endif
+	
 	omap_dm_timer_disable(omap_vibrator_timer); 
    	//ImmVibeSPI_ForceOut_AmpDisable( 0 );
 
@@ -212,59 +268,59 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_Terminate( void )
     	return VIBE_S_SUCCESS;
 }
 
-bool bInTestMode = 0;
-/*** Called by the real-time loop to set PWM duty cycle, and enable amp if required*/
-IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_Set( VibeUInt8 nActuatorIndex, VibeInt8 nForce )
+/*
+** Called by the real-time loop to set PWM duty cycle
+*/
+//[LGE_CHANGE_S] seungmoon.lee@lge.com, 2012-02-29
+IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_SetSamples(VibeUInt8 nActuatorIndex, VibeUInt16 nOutputSignalBitDepth, VibeUInt16 nBufferSizeInBytes, VibeInt8* pForceOutputBuffer)
 {
-
-#if 0 
+//AnandKumar_EUR_LGP970_TD114610_Start_LGE_Changes
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-05-13, This function executes twice.. duplicate vib_generatePWM() */
+#if 1 
 	unsigned int nTmp;
+    VibeInt8 nForce;
 	
-	DbgOut(( "[ImmVibeSPI] ImmVibeSPI_ForceOut_Set nForce =  %d \n", nForce ));
 
+
+    switch (nOutputSignalBitDepth)
+    {
+        case 8:
+            /* pForceOutputBuffer is expected to contain 1 byte */
+            if (nBufferSizeInBytes != 1) return VIBE_E_FAIL;
+
+            nForce = pForceOutputBuffer[0];
+            break;
+        case 16:
+            /* pForceOutputBuffer is expected to contain 2 byte */
+            if (nBufferSizeInBytes != 2) return VIBE_E_FAIL;
+
+            /* Map 16-bit value to 8-bit */
+            nForce = ((VibeInt16*)pForceOutputBuffer)[0] >> 8;
+            break;
+        default:
+            /* Unexpected bit depth */
+            return VIBE_E_FAIL;
+    }
+//[LGE_CHANGE_E] seungmoon.lee@lge.com, 2012-02-29
+//#if 1
 	/* Check the Force value with Max and Min force value */
 	if (nForce > 127) nForce = 127;
 	if (nForce < -127) nForce = -127;
 	
-	if(bInTestMode)
-		   {		   
-			 if(nForce > 0 && nForce < 125) 
-			 	nForce = 125; 
-    	}
 	if (nForce == 0) {
 		hub_vibrator_gpio_enable(0);
 		omap_dm_timer_stop(omap_vibrator_timer);		
 	} else {
 		hub_vibrator_gpio_enable(1);
 		nTmp = 0xFFFFFFF7 - (((127 - nForce) * 9) >> 1);
+		DbgOut(( "[ImmVibeSPI] ImmVibeSPI_ForceOut_SetSamples nForce =  %d / nTmp = %d \n", nForce, nTmp ));
 		omap_dm_timer_set_match(omap_vibrator_timer, 1, nTmp);
 		omap_dm_timer_start(omap_vibrator_timer);		
 	}
 #endif
-
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-05-13, This function executes twice.. duplicate vib_generatePWM() */
+//AnandKumar_EUR_LGP970_TD114610_End_LGE Changes
 	return VIBE_S_SUCCESS;
-}
-
-
-/*** Called by the real-time loop to set force output, and enable amp if required*/
-IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_SetSamples( VibeUInt8 nActuatorIndex, VibeUInt16 nOutputSignalBitDepth, VibeUInt16 nBufferSizeInBytes, VibeInt8* pForceOutputBuffer )
-{
-    VibeStatus status = VIBE_E_FAIL;
-
-    /* nOutputSignalBitDepth should always be 8 */
-
-    if (1 == nBufferSizeInBytes)
-    {
-        status = ImmVibeSPI_ForceOut_Set(nActuatorIndex, pForceOutputBuffer[0]);
-    }
-    else
-    {
-        /* Send 'nBufferSizeInBytes' bytes of data to HW */
-        /* Will get here only if configured to handle Piezo actuators */
-		printk( "[ImmVibeSPI] ImmVibeSPI_ForceOut_SetSamples nBufferSizeInBytes =  %d \n", nBufferSizeInBytes );
-    }
-
-    return status;
 }
 
 

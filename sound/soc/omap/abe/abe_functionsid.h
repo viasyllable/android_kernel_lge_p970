@@ -1,11 +1,16 @@
 /*
- * ALSA SoC OMAP ABE driver
-*
- * Author:          Laurent Le Faucheur <l-le-faucheur@ti.com>
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
+ *
+ * GPL LICENSE SUMMARY
+ *
+ * Copyright(c) 2010-2011 Texas Instruments Incorporated,
+ * All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,8 +19,40 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ * Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
+ * The full GNU General Public License is included in this distribution
+ * in the file called LICENSE.GPL.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2010-2011 Texas Instruments Incorporated,
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * * Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * * Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *   distribution.
+ * * Neither the name of Texas Instruments Incorporated nor the names of
+ *   its contributors may be used to endorse or promote products derived
+ *   from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 #ifndef _ABE_FUNCTIONSID_H_
@@ -30,17 +67,17 @@
 #define C_ABE_FW_FUNCTION_OS0Fill                           4
 #define C_ABE_FW_FUNCTION_mixer2                            5
 #define C_ABE_FW_FUNCTION_mixer4                            6
-#define C_ABE_FW_FUNCTION_inplaceGain                       7
-#define C_ABE_FW_FUNCTION_StreamRouting                     8
-#define C_ABE_FW_FUNCTION_gainConverge                      9
-#define C_ABE_FW_FUNCTION_dualIir                           10
-#define C_ABE_FW_FUNCTION_IO_DL_pp                          11
-#define C_ABE_FW_FUNCTION_IO_generic                        12
-#define C_ABE_FW_FUNCTION_irq_fifo_debug                    13
-#define C_ABE_FW_FUNCTION_synchronize_pointers              14
-#define C_ABE_FW_FUNCTION_VIBRA2                            15
-#define C_ABE_FW_FUNCTION_VIBRA1                            16
-#define C_ABE_FW_FUNCTION_APS_core                          17
+#define C_ABE_FW_FUNCTION_mixer4_dual_mono                  7
+#define C_ABE_FW_FUNCTION_inplaceGain                       8
+#define C_ABE_FW_FUNCTION_StreamRouting                     9
+#define C_ABE_FW_FUNCTION_gainConverge                      10
+#define C_ABE_FW_FUNCTION_dualIir                           11
+#define C_ABE_FW_FUNCTION_IO_DL_pp                          12
+#define C_ABE_FW_FUNCTION_IO_generic                        13
+#define C_ABE_FW_FUNCTION_irq_fifo_debug                    14
+#define C_ABE_FW_FUNCTION_synchronize_pointers              15
+#define C_ABE_FW_FUNCTION_VIBRA2                            16
+#define C_ABE_FW_FUNCTION_VIBRA1                            17
 #define C_ABE_FW_FUNCTION_IIR_SRC_MIC                       18
 #define C_ABE_FW_FUNCTION_wrappers                          19
 #define C_ABE_FW_FUNCTION_ASRC_DL_wrapper                   20
@@ -48,6 +85,16 @@
 #define C_ABE_FW_FUNCTION_mem_init                          22
 #define C_ABE_FW_FUNCTION_debug_vx_asrc                     23
 #define C_ABE_FW_FUNCTION_IIR_SRC2                          24
+#define C_ABE_FW_FUNCTION_ASRC_DL_wrapper_sibling           25
+#define C_ABE_FW_FUNCTION_ASRC_UL_wrapper_sibling           26
+#define C_ABE_FW_FUNCTION_FIR6                              27
+#define C_ABE_FW_FUNCTION_SRC44P1                           28
+#define C_ABE_FW_FUNCTION_SRC44P1_1211                      29
+#define C_ABE_FW_FUNCTION_SRC44P1_PP                        30
+#define C_ABE_FW_FUNCTION_SRC44P1_1211_PP                   31
+#define C_ABE_FW_FUNCTION_CHECK_IIR_LEFT                    32
+#define C_ABE_FW_FUNCTION_CHECK_IIR_RIGHT                   33
+#define C_ABE_FW_FUNCTION_FIR12_2                           34
 /*
  *    COPY function ID definitions
  */
@@ -72,4 +119,5 @@
 #define ROUTE_MM_UL_CFPID                                   18
 #define IO_IP_CFPID                                         19
 #define COPY_UNDERFLOW_CFPID                                20
+#define COPY_MCPDM_DL_HF_PDL1_CFPID                         21
 #endif /* _ABE_FUNCTIONSID_H_ */

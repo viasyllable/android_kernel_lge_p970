@@ -28,7 +28,6 @@
 
 /* E.g (IDEBUG_MASK | CDEBUG_MASK | DDEBUG_MASK) */
 #define DEFAULT_DEBUG_MASK 0
-//#define DEFAULT_DEBUG_MASK (IDEBUG_MASK | MDEBUG_MASK | RDEBUG_MASK | CDEBUG_MASK | DDEBUG_MASK)
 
 /*
  * (Un)Define these *DEBUG to compile out/in the pr_debug calls.
@@ -329,4 +328,3 @@ struct proc_qtu_data {
 
 /*----------------------------------------------*/
 #endif  /* ifndef __XT_QTAGUID_INTERNAL_H__ */
-

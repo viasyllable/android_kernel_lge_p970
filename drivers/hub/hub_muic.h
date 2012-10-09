@@ -25,13 +25,23 @@
 #define _MUIC_H_
 
 #define MUIC_INT_GPIO	40	// MUIC_INT_N
+#if defined(CONFIG_PRODUCT_LGE_LU6800)
+#define DP3T_IN_1_GPIO	38	// OMAP_UART_SW
+#define DP3T_IN_2_GPIO	39	// IFX_UART_SW
+#else
 #define DP3T_IN_1_GPIO	161	// OMAP_UART_SW
 #define DP3T_IN_2_GPIO	162	// IFX_UART_SW
+#endif
 #define USIF_IN_1_GPIO	182	// USIF1_SW
 #define IFX_VBUS_EN	101	// IFX_VBUS_EN
 
+#if defined(CONFIG_PRODUCT_LGE_LU6800)
+#define USB_SW		38	//USB SW for LGT REVA2
+#define UART_SW		39	//UART SW for LGT REVA2
+#else
 #define USB_SW		161	//USB SW for LGT REVA2
 #define UART_SW		162	//UART SW for LGT REVA2
+#endif
 
 #define TD_INT_STAT	70000	// INT_STAT bits settle down time since MUIC INT falls
 #define TD_STATUS	250000	// STATUS bits settle down time since MUIC INT falls
@@ -153,9 +163,15 @@ typedef enum {
 	MUIC_EARMIC,		// 11
 	MUIC_TV_OUT_LOAD,	// 12 - Not used.
 	MUIC_OTG,		// 13 - Not used.
+#if	defined(CONFIG_PRODUCT_LGE_LU6800) || defined(CONFIG_PRODUCT_LGE_KU5900)
+	MUIC_CP_DOWNLOAD,	// 14
+	MUIC_ILLEGAL_CHG,	// 15
+	MUIC_RESERVE1,		// 16
+#else
 	MUIC_RESERVE1,		// 14
 	MUIC_RESERVE2,		// 15
 	MUIC_RESERVE3,		// 16
+#endif
 	MUIC_MODE_NO,		// 17
 } TYPE_MUIC_MODE;
 

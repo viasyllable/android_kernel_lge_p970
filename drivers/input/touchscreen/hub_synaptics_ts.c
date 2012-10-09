@@ -1,6 +1,6 @@
-/* drivers/input/keyboard/synaptics_i2c_rmi.c
+/* drivers/input/touchscreen/hub_synaptics_ts.c
  *
- * Copyright (C) 2007 Google, Inc.
+ * Copyright (C) 2011 LG Electronics, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -10,6 +10,11 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ *
+ * 2011-02-14 Kim Sunghee  <seven.kim@lge.com>
+ *
+ * 2011-03-02 Choi Daewan  <ntdeaewan.choi@lge.com>
  *
  */
 
@@ -22,39 +27,45 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/platform_device.h>
+#include <linux/irq.h>
 #include <mach/gpio.h>
 #include <linux/jiffies.h>
+
+#include <linux/workqueue.h>
+#include <linux/delay.h>
+#include <linux/wakelock.h>
+
 #include <linux/slab.h>
 
-#include <linux/workqueue.h>	//20101221 seven.kim@lge.com to use real time work queue
-#include <linux/delay.h> //20101221 seven.kim@lge.com to use mdelay
-#include <linux/wakelock.h> 	//20102121 seven.kim@lge.com to use wake_lock
+#include <../../../arch/arm/mach-omap2/mux.h>
 
-#ifdef CONFIG_LGE_DVFS
-#include <linux/dvs_suite.h>
-#endif	// CONFIG_LGE_DVFS
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2012.03.20] - Not included
+/* 20110331 sookyoung.kim@lge.com LG-DVFS [START_LGE] */
+//#include <linux/dvs_suite.h>
+/* 20110331 sookyoung.kim@lge.com LG-DVFS [END_LGE] */
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2012.03.20]- Not included
 
-#include "synaptics_ts_firmware.h"
-#include "synaptics_ts_firmware_lgit.h"
+#include "black_synaptics_ts_firmware.h"
+#include "black_synaptics_ts_firmware_lgit.h"
 #define SYNAPTICS_SUPPORT_FW_UPGRADE
 
-/*<sunggyun.yu@lge.com> enable this for printk message*/
-//#define DEBUG
-
-#if 0 //seven for debugging
+#if 0
 #define pr_debug(fmt, ...) \
 	printk(KERN_DEBUG pr_fmt(fmt), ##__VA_ARGS__)
 #endif
 
-#if 0 //seven open for test
+#if 0
 #define FEATURE_LGE_TOUCH_MOVING_IMPROVE
 #define FEATURE_LGE_TOUCH_JITTERING_IMPROVE
-#endif //end of seven
+#endif
 #define FEATURE_LGE_TOUCH_GHOST_FINGER_IMPROVE
-//#define FEATURE_LGE_TOUCH_GRIP_SUPPRESSION 
+#define FEATURE_LGE_TOUCH_GRIP_SUPPRESSION
 
-#define FEATURE_LGE_TOUCH_REAL_TIME_WORK_QUEUE	
-#define FEATURE_LGE_TOUCH_ESD_DETECT					
+#define FEATURE_LGE_TOUCH_REAL_TIME_WORK_QUEUE
+#define FEATURE_LGE_TOUCH_ESD_DETECT
+
+#define TS_DEBUG	0
+#define TS_IRQ_DEPTH_CHECK	1
 /*===========================================================================
                 DEFINITIONS AND DECLARATIONS FOR MODULE
 
@@ -63,11 +74,9 @@ and other items needed by this module.
 ===========================================================================*/
 
 static struct workqueue_struct *synaptics_wq;
-
 static struct i2c_client *hub_ts_client = NULL;
 
-
-struct synaptics_ts_data {
+struct synaptics_ts_priv {
 	uint16_t addr;
 	struct i2c_client *client;
 	struct input_dev *input_dev;
@@ -88,11 +97,11 @@ struct synaptics_ts_data {
 
 	struct early_suspend early_suspend;
 
+	unsigned int interval;
 	struct delayed_work init_delayed_work;
-
-	unsigned char product_value; 
+	unsigned char product_value; //product_value=0:misung panel  product_value=1 : LGIT panel
 };
-
+struct synaptics_ts_priv *p_ts;
 
 enum key_leds {
 	MENU,
@@ -101,6 +110,8 @@ enum key_leds {
 	SEARCH,
 };
 
+extern void touchkey_pressed(enum key_leds id);
+
 static int init_stabled = -1;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -108,19 +119,13 @@ static void synaptics_ts_early_suspend(struct early_suspend *h);
 static void synaptics_ts_late_resume(struct early_suspend *h);
 #endif
 
-
-static uint32_t  Synaptics_Check_Touch_Interrupt_Status();
-
-
-
-extern void touchkey_pressed(enum key_leds id);
-extern unsigned int system_rev;
-
 #define TOUCH_INT_N_GPIO						35
 
-
-extern int lcd_off_boot;
-
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2012.04.02] - Do not Turn on Keyled in Kernel.
+//extern void bd2802_touch_on(void);
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2012.04.02]- Do not Turn on Keyled in Kernel.
+extern void bd2802_touch_timer_restart(void);
+extern u8 key_led_flag;
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
 /*                                                                         */
@@ -158,6 +163,7 @@ extern int lcd_off_boot;
 #define TS_SNTS_GET_SLEEP_MODE(device_control_reg) \
 		(device_control_reg&0x07)
 
+
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
 /*                                                                         */
 /*                       CONSTANTS DATA DEFINITIONS                        */
@@ -168,7 +174,10 @@ extern int lcd_off_boot;
 #define TOUCH_EVENT_BUTTON						1
 #define TOUCH_EVENT_ABS							2
 
-#define SYNAPTICS_FINGER_MAX					5  	
+
+
+#define SYNAPTICS_FINGER_MAX					5
+
 
 #define SYNAPTICS_TM1576_PRODUCT_ID				"TM1576"
 #define SYNAPTICS_TM1576_RESOLUTION_X			1036
@@ -185,8 +194,10 @@ extern int lcd_off_boot;
 #define SYNAPTICS_TM1738_PRODUCT_ID				"TM1738"
 #define SYNAPTICS_TM1738_RESOLUTION_X			1036
 #define SYNAPTICS_TM1738_RESOLUTION_Y			1896
-#define SYNAPTICS_TM1738_LCD_ACTIVE_AREA			1728
+#define SYNAPTICS_TM1738_LCD_ACTIVE_AREA		1728
 #define SYNAPTICS_TM1738_BUTTON_ACTIVE_AREA		1805
+
+
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
 /*                                                                         */
@@ -198,16 +209,13 @@ extern int lcd_off_boot;
 #define SYNAPTICS_DATA_BASE_REG					0x13
 #define SYNAPTICS_INT_STATUS_REG				0x14
 
-#define SYNAPTICS_2D_GESTURE_FINGER_0			0x4B	//20110211 seven added to prevent palm gesture
-#define SYNAPTICS_CONTROL_REG						0x4C	//20101221 seven changed 0x4F -> 0x4C
-#define SYNAPTICS_RIM_CONTROL_INTERRUPT_ENABLE	0x4D	//20101227 seven added to prevent interrupt in booting time
+#define SYNAPTICS_CONTROL_REG					0x4C
+#define SYNAPTICS_RIM_CONTROL_INTERRUPT_ENABLE	0x4D
 
-#define SYNAPTICS_DELTA_X_THRES_REG				0x50 	//20101221 seven changed 0x53 -> 0x50
-#define SYNAPTICS_DELTA_Y_THRES_REG				0x51 	//20101221 seven changed 0x53 -> 0x51
+#define SYNAPTICS_DELTA_X_THRES_REG				0x50
+#define SYNAPTICS_DELTA_Y_THRES_REG				0x51
 
-#define SYNAPTICS_2D_GESTURE_ENABLES_2			0x59	//20110211 seven added to prevent palm gesture
-
-#define SYNAPTICS_SENSITIVITY_ADJUSTMENT			0x9A	//20110110 seven added for touch sensing test
+#define SYNAPTICS_2D_GESTURE_ENABLES_2			0x59
 
 #define SYNAPTICS_FW_REVISION_REG				0xAD
 
@@ -223,8 +231,8 @@ extern int lcd_off_boot;
 #define SYNAPTICS_CONTROL_SLEEP					1<<0
 #define SYNAPTICS_CONTROL_NOSLEEP				1<<2
 
-#ifdef FEATURE_LGE_TOUCH_ESD_DETECT 
-#define SYNAPTICS_CONTROL_CONFIGURED				1<<7
+#ifdef FEATURE_LGE_TOUCH_ESD_DETECT
+#define SYNAPTICS_CONTROL_CONFIGURED			1<<7
 #define SYNAPTICS_RIM_DEVICE_RESET				1<<0
 #endif /*FEATURE_LGE_TOUCH_ESD_DETECT*/
 
@@ -241,6 +249,8 @@ extern int lcd_off_boot;
 unsigned char SynapticsFirmware[FW_IMAGE_SIZE];
 #endif /* SYNAPTICS_SUPPORT_FW_UPGRADE */
 
+#define SYNAPTICS_TS_SENSITYVITY_REG		0x9B
+#define SYNAPTICS_TS_SENSITYVITY_VALUE		0x00
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
 /*                                                                         */
@@ -257,14 +267,11 @@ typedef struct {
 	unsigned char m_FunctionExists;
 } T_RMI4FuncDescriptor;
 
-
-
-
 typedef struct
 {
 	unsigned char device_status_reg;						//0x13
-	unsigned char interrupt_status_reg;					//0x14
-	unsigned char finger_state_reg[3];					//0x15~0x17
+	unsigned char interrupt_status_reg;						//0x14
+	unsigned char finger_state_reg[3];						//0x15~0x17
 
 	unsigned char fingers_data[SYNAPTICS_FINGER_MAX][5];	//0x18 ~ 0x49
 	/* 5 data per 1 finger, support 10 fingers data
@@ -275,13 +282,13 @@ typedef struct
 	fingers_data[x][4] : xth finger's Z (pressure)
 	*/
 	// Etc...
-#if 0		
 	unsigned char gesture_flag0;							//0x4A
 	unsigned char gesture_flag1;							//0x4B
+#if 0
 	unsigned char pinch_motion_X_flick_distance;			//0x4C
 	unsigned char rotation_motion_Y_flick_distance;		//0x4D
 	unsigned char finger_separation_flick_time;			//0x4E
-#endif	
+#endif
 } ts_sensor_data;
 
 typedef struct {
@@ -297,7 +304,6 @@ static ts_sensor_data ts_reg_data;
 static ts_finger_data prev_ts_data;
 static ts_finger_data curr_ts_data;
 
-
 static uint8_t curr_event_type = TOUCH_EVENT_NULL;
 static uint8_t prev_event_type = TOUCH_EVENT_NULL;
 
@@ -310,14 +316,13 @@ static uint16_t SYNAPTICS_PANEL_BUTTON_MIN_Y;
 
 unsigned char  touch_fw_version = 0;
 
-struct wake_lock ts_wake_lock; 
+struct wake_lock ts_wake_lock;
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
 /*                                                                         */
 /*                           Local Functions                               */
 /*                                                                         */
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
-
 
 #ifdef FEATURE_LGE_TOUCH_MOVING_IMPROVE
 #define ADJUST_VAL				4
@@ -337,213 +342,183 @@ static void touch_adjust_position(int finger_num)
 }
 #endif /* FEATURE_LGE_TOUCH_MOVING_IMPROVE */
 
-
 #ifdef FEATURE_LGE_TOUCH_GHOST_FINGER_IMPROVE
-#define MELT_CONTROL	0xF0
+#define MELT_CONTROL			0xF0
 #define NO_MELT 				0x00
 #define MELT					0x01
 #define AUTO_MELT				0x10
 
-static int melt_mode = 0;
-
+static u8 melt_mode = 0;
+static u8 melt_flag = 0;
 //static int ts_pre_state = 0; /* for checking the touch state */
-static int ghost_finger_1 = 0; // remove for ghost finger
-static int ghost_finger_2 = 0;
-static int pressed = 0;
+static u8 ghost_finger_1 = 0; // remove for ghost finger
+static u8 ghost_finger_2 = 0;
+static u8 pressed = 0;
 static unsigned long pressed_time;
-
-static int ghost_count = 0;
-
 #endif
 
-#ifdef FEATURE_LGE_TOUCH_ESD_DETECT 
-extern  struct i2c_client *aat2870_i2c_client;
-extern  void aat2870_touch_ldo_enable(struct i2c_client *client, int on);
-static bool  Synatics_ts_touch_Recovery();
+#ifdef FEATURE_LGE_TOUCH_ESD_DETECT
+extern int aat2870_touch_ldo_write(u8 reg , u8 val);
+extern u8 aat2870_touch_ldo_read(u8 reg);
+static bool  synatics_ts_touch_recovery(void);
 #endif /*FEATURE_LGE_TOUCH_ESD_DETECT*/
 
-
-//static atomic_t g_synaptics_ts_resume_flag;
-//static atomic_t g_synaptics_ts_suspend_flag;
-
-
-
-int g_touch_read_cnt = 0; 		//20110407 ATS TEST FAIL
-int g_touch_restart_flag = 0;		//20110407 ATS TEST FAIL
-s32 synaptics_ts_i2c_read_block_data(struct i2c_client *client, u8 command,
-				  u8 length, u8 *values)
+extern int lcd_off_boot;
+//static void synaptics_ts_initialize(void)
+static unsigned int synaptics_irq_depth_count(void)
 {
-	s32 status, retry_count = 5;
-	status = i2c_smbus_read_i2c_block_data(client, command, length, values);
+	struct irq_desc *desc = irq_to_desc(p_ts->client->irq);
+	unsigned int irq_depth = desc->depth;
 
-	if (status < 0)
+	return irq_depth;
+}
+
+static int disable_irq_flag = 0;
+static void synaptics_ts_initialize(struct work_struct *work)
+{
+	int ret;
+	unsigned int irq_depth = synaptics_irq_depth_count();
+	unsigned int before_irq_depth;
+	
+#if TS_IRQ_DEPTH_CHECK
+	printk("[TS Fixed] %s : %d / irq_depth = %d(%d)\n",__func__,__LINE__, irq_depth, disable_irq_flag);
+#else
+	printk("[TS NOT Fixed] %s : %d / irq_depth = %d(%d)\n",__func__,__LINE__, irq_depth, disable_irq_flag);
+#endif
+
+	ret = gpio_direction_input(TOUCH_INT_N_GPIO);
+	if(ret < 0)
+		printk("[SHYUN] [%s-%d] gpio_direction_input error [%d]\n",__func__, __LINE__, ret);
+	
+	if(!gpio_get_value(TOUCH_INT_N_GPIO))
 	{
-		struct synaptics_ts_data *ts = i2c_get_clientdata(client);
-		pr_warning("%s(). error: %d \n",__func__, status);
-#if 1 //20110309 seven for late_resume_lcd
-		g_touch_read_cnt++;
-		if(g_touch_restart_flag ==0 && g_touch_read_cnt > 3)
+		ret = i2c_smbus_read_i2c_block_data(p_ts->client, SYNAPTICS_DATA_BASE_REG, sizeof(ts_reg_data), (u8 *)&ts_reg_data);
+		if(ret<0)
 		{
-			//printk("%s : Int Pin : %s \n",__func__, Synaptics_Check_Touch_Interrupt_Status()?"LOW":"HIGH");
-
-			g_touch_restart_flag = 1;
-		        Synatics_ts_touch_Recovery();
-			g_touch_restart_flag = 0;
-			g_touch_read_cnt = 0;
-
-			schedule_delayed_work(&ts->init_delayed_work, msecs_to_jiffies(400));
+			printk("[touch] [fail] SYNAPTICS_DATA_BASE_REG READ\n");
 		}
-#endif //20110309 seven for late_resume_lcd
 	}
-	else
-		g_touch_read_cnt = 0;
 
-	return status;
-}
-
-s32 synaptics_ts_i2c_read_byte_data(struct i2c_client *client, u8 command)
-{
-	s32 status, retry_count = 5;
-	status = i2c_smbus_read_byte_data(client, command);
-
-	if (status < 0)
+	ret = i2c_smbus_write_byte_data(p_ts->client, SYNAPTICS_RIM_CONTROL_INTERRUPT_ENABLE, 0x00); //interrupt disable
+	if(ret<0)
 	{
-		struct synaptics_ts_data *ts = i2c_get_clientdata(client);
-		pr_warning("%s(). error: %d \n",__func__, status);
-
-#if 0 //20110309 seven for late_resume_lcd
-		/* sensor recover when i2c fail */
-		wake_lock(&ts_wake_lock);		
-		Synatics_ts_touch_Recovery();
-		wake_unlock(&ts_wake_lock);	
-
-		schedule_delayed_work(&ts->init_delayed_work, msecs_to_jiffies(400));		
-#endif //20110309 seven for late_resume_lcd				
+		printk("[touch] [fail] SYNAPTICS_RIM_CONTROL_INTERRUPT_ENABLE\n");
 	}
-	
-	return status;
-}
+	disable_irq(p_ts->client->irq);
 
-s32 synaptics_ts_i2c_write_block_data(struct i2c_client *client, u8 command,
-			       u8 length, const u8 *values)
-{
-	s32 status;
-	
-	status = i2c_smbus_write_block_data(client , command, length, values );
-	
-	if (status < 0)
+	ret = i2c_smbus_write_byte_data(p_ts->client, SYNAPTICS_CONTROL_REG, SYNAPTICS_CONTROL_NOSLEEP);
+	if(ret<0)
 	{
-		struct synaptics_ts_data *ts = i2c_get_clientdata(client);
-		pr_warning("%s(). error: %d \n",__func__, status);
-
-#if 0 //20110309 seven for late_resume_lcd
-		/* sensor recover when i2c fail */
-		wake_lock(&ts_wake_lock);		
-		Synatics_ts_touch_Recovery();
-		wake_unlock(&ts_wake_lock);	
-
-		schedule_delayed_work(&ts->init_delayed_work, msecs_to_jiffies(400));		
-#endif //20110309 seven for late_resume_lcd			
+		printk("[touch] [fail] SYNAPTICS_CONTROL_CONFIGURED, SYNAPTICS_CONTROL_NOSLEEP\n");
 	}
 	
-	return status;
-}
-s32 synaptics_ts_i2c_write_byte_data(struct i2c_client *client, u8 command, u8 value)
-{
-	s32 status;
-	
-	status = i2c_smbus_write_byte_data(client, command, value); /* wake up */
-
-	if (status < 0)
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2011.09.09] - Merge from Black_Froyo MR Ver.
+#if 0
+	ret = i2c_smbus_write_byte_data(p_ts->client, SYNAPTICS_2D_GESTURE_ENABLES_2, 0x00);
+	if(ret<0)
 	{
-		struct synaptics_ts_data *ts = i2c_get_clientdata(client);
-		pr_warning("%s(). error: %d \n",__func__, status);
+		printk("[touch] [fail] SYNAPTICS_2D_GESTURE_ENABLES_2\n");
+	}
+#endif	
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2011.09.09]- Merge from Black_Froyo MR Ver.
+	
+	ret = i2c_smbus_read_i2c_block_data(p_ts->client, SYNAPTICS_DATA_BASE_REG, sizeof(ts_reg_data), (u8 *)&ts_reg_data);
+	if(ret<0)
+	{
+		printk("[touch] [fail] SYNAPTICS_DATA_BASE_REG READ\n");
+	}
+		
+	ret = i2c_smbus_write_byte_data(p_ts->client, SYNAPTICS_TS_SENSITYVITY_REG, SYNAPTICS_TS_SENSITYVITY_VALUE);
+	if(ret<0)
+	{
+		printk("[touch] [fail] SYNAPTICS_TS_SENSITYVITY_VALUE\n");
+	}
 
-#if 0 //20110309 seven for late_resume_lcd
-		/* sensor recover when i2c fail */
-		wake_lock(&ts_wake_lock);		
-		Synatics_ts_touch_Recovery();
-		wake_unlock(&ts_wake_lock);	
-
-		schedule_delayed_work(&ts->init_delayed_work, msecs_to_jiffies(400));		
-#endif //20110309 seven for late_resume_lcd	
+	ret = i2c_smbus_write_byte_data(p_ts->client, SYNAPTICS_DELTA_X_THRES_REG, 0x03);
+	if(ret<0)
+	{
+		printk("[touch] [fail] SYNAPTICS_DELTA_X_THRES_REG\n");
 	}
 	
-	return status;
+	ret = i2c_smbus_write_byte_data(p_ts->client, SYNAPTICS_DELTA_Y_THRES_REG, 0x03);
+	if(ret<0)
+	{
+		printk("[touch] [fail] SYNAPTICS_DELTA_Y_THRES_REG\n");
+	}
+	
+#ifdef FEATURE_LGE_TOUCH_GHOST_FINGER_IMPROVE
+	ret = i2c_smbus_write_byte_data(p_ts->client, MELT_CONTROL, MELT);
+	if(ret<0)
+	{
+		printk("[touch] [fail] MELT_CONTROL, MELT\n");
+	}
+#endif
+
+	enable_irq(p_ts->client->irq);
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2011.09.08] - Prevent duplication of enable_irq api calling.(Remove the warning log)
+	init_stabled = 1;
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2011.09.08]- Prevent duplication of enable_irq api calling.(Remove the warning log)
+	melt_flag = 1;
+	ret = i2c_smbus_write_byte_data(p_ts->client, SYNAPTICS_RIM_CONTROL_INTERRUPT_ENABLE, 0x07); //interrupt enable
+	if(ret<0)
+	{
+		printk("[touch] [fail] SYNAPTICS_RIM_CONTROL_INTERRUPT_ENABLE\n");
+		synatics_ts_touch_recovery();
+		mdelay(20);
+		i2c_smbus_write_byte_data(p_ts->client, SYNAPTICS_RIM_CONTROL_INTERRUPT_ENABLE, 0x07);
+	}
+	
+	before_irq_depth = irq_depth;
+
+#if TS_IRQ_DEPTH_CHECK
+	if(irq_depth > 0)
+	{
+		printk("[SHYUN_TOUCH] IRQ Depth Checking [depth = %d]!\n", irq_depth);
+
+		while(irq_depth > 0)
+		{
+			enable_irq(p_ts->client->irq);
+			irq_depth--;			
+		}
+	}
+#endif
+	printk("[SHYUN_TOUCH] TS_Init END [%d -> %d]\n",before_irq_depth, irq_depth);
+
+	return;
 }
 
-
+static u8 dummy;
+static u8 ts_esd_detect_flag=0;
+static u8 ts_esd_reset=0;
+static u8 ts_recovery_count=0;
+static u8 ts_keyled_count = 0;
 
 static void synaptics_ts_init_delayed_work(struct work_struct *work)
 {
-	struct synaptics_ts_data *ts = container_of(work, struct synaptics_ts_data, work);
-	int ret;
+	int ts_delay_work_flag, ret;
 
-/*For_Resume_Speed*/pr_warning("%s() : Touch Delayed Work : Start!!\n", __func__);
+	local_irq_save(ts_delay_work_flag);
 
-	
-	//if (system_rev < 4)
+	if(ts_esd_detect_flag)
 	{
-		uint32_t  pinValue = 0;
-		pinValue = Synaptics_Check_Touch_Interrupt_Status();
-		if(pinValue)
-		{
-			uint8_t dummy_read = 0;	
-			ts_sensor_data tmp_ts_reg_data;
-
-			synaptics_ts_i2c_read_block_data(hub_ts_client, SYNAPTICS_DATA_BASE_REG, sizeof(tmp_ts_reg_data), (u8 *)&tmp_ts_reg_data);
-		}
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2011.09.09] - Merge from Black_Froyo MR Ver.
+		//synatics_ts_touch_recovery();
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2011.09.09]- Merge from Black_Froyo MR Ver.
+		ts_esd_detect_flag=0;
+		ts_esd_reset=0;
+		printk("[touch] ESD detect && recovery !!\n");
 	}
-	
-	
-	
-	synaptics_ts_i2c_write_byte_data(hub_ts_client, SYNAPTICS_RIM_CONTROL_INTERRUPT_ENABLE, 0x00); //interrupt disable
-	
-	disable_irq(hub_ts_client->irq);
-	
 
-	synaptics_ts_i2c_read_block_data(hub_ts_client, SYNAPTICS_DATA_BASE_REG, sizeof(ts_reg_data), (u8 *)&ts_reg_data);
+	if(init_stabled==-1)	enable_irq(p_ts->client->irq);
 	
-	
-	if(system_rev < 4)
-	{
-	synaptics_ts_i2c_write_byte_data(hub_ts_client, SYNAPTICS_CONTROL_REG, SYNAPTICS_CONTROL_NOSLEEP); /* wake up */
-		synaptics_ts_i2c_write_byte_data(hub_ts_client, SYNAPTICS_CONTROL_REG, SYNAPTICS_CONTROL_CONFIGURED );
-	}
-	else
-	{
-	synaptics_ts_i2c_write_byte_data(hub_ts_client, SYNAPTICS_CONTROL_REG, (SYNAPTICS_CONTROL_CONFIGURED | SYNAPTICS_CONTROL_NOSLEEP));
-	
-	synaptics_ts_i2c_write_byte_data(hub_ts_client, SYNAPTICS_2D_GESTURE_ENABLES_2, 0x00);
-	
-	}
-	
-
-
-#ifdef FEATURE_LGE_TOUCH_MOVING_IMPROVE
-	ret = synaptics_ts_i2c_write_byte_data(hub_ts_client, SYNAPTICS_DELTA_X_THRES_REG, 0x01);
-	ret = synaptics_ts_i2c_write_byte_data(hub_ts_client, SYNAPTICS_DELTA_Y_THRES_REG, 0x01);
-#else
-	ret = synaptics_ts_i2c_write_byte_data(hub_ts_client, SYNAPTICS_DELTA_X_THRES_REG, /*0x03*/0x01);
-	ret = synaptics_ts_i2c_write_byte_data(hub_ts_client, SYNAPTICS_DELTA_Y_THRES_REG, /*0x03*/0x01);
-#endif /* FEATURE_LGE_TOUCH_MOVING_IMPROVE */
-
-#ifdef FEATURE_LGE_TOUCH_GHOST_FINGER_IMPROVE
-	synaptics_ts_i2c_write_byte_data(hub_ts_client, MELT_CONTROL, MELT);
-//	pr_warning("Touch MELT\n");
-#endif
-
+	melt_flag=1;
 	init_stabled = 1;
-
-	
-	enable_irq(hub_ts_client->irq);
-	synaptics_ts_i2c_write_byte_data(hub_ts_client, SYNAPTICS_RIM_CONTROL_INTERRUPT_ENABLE, 0x07); //interrupt enable
-	
-
-//For_Resume_Speed	pr_warning("%s() : Touch Delayed Work : End!!\n", __func__);
+	local_irq_restore(ts_delay_work_flag);
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2011.09.09] - Merge from Black_Froyo MR Ver.
+	//p_ts->interval = msecs_to_jiffies(500);
+   	//schedule_delayed_work(&p_ts->init_delayed_work, p_ts->interval);
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2011.09.09]- Merge from Black_Froyo MR Ver.
 }
-
-
 
 #ifdef FEATURE_LGE_TOUCH_GRIP_SUPPRESSION
 static int g_gripIgnoreRangeValue = 0;
@@ -558,10 +533,19 @@ static int touch_ConvertPixelToRawData(int pixel)
 	return result;
 }
 
+void synaptics_ts_ldo_write(u8 reg , u8 val)
+{
+  int ret;
+
+  ret = i2c_smbus_write_byte_data(hub_ts_client, reg , val);
+
+  return;
+}
+
 ssize_t touch_gripsuppression_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	sprintf(buf, "%d\n", g_receivedPixelValue);	
-	pr_debug("[KERNEL] [TOUCH] SHOW (%d) \n", g_receivedPixelValue);
+	sprintf(buf, "%d\n", g_receivedPixelValue);
+	printk("[kernel] [touch] SHOW (%d) \n", g_receivedPixelValue);
 
 	return (ssize_t)(strlen(buf)+1);
 
@@ -571,257 +555,245 @@ ssize_t touch_gripsuppression_store(struct device *dev, struct device_attribute 
 {
 	sscanf(buffer, "%d", &g_receivedPixelValue);
 	g_gripIgnoreRangeValue = touch_ConvertPixelToRawData(g_receivedPixelValue);
-	pr_debug("[KERNEL] [TOUCH] STORE  pixel(%d) Convet (%d) \n", g_receivedPixelValue, g_gripIgnoreRangeValue);
-	
+	printk("[kernel] [touch] STORE  pixel(%d) convet (%d) \n", g_receivedPixelValue, g_gripIgnoreRangeValue);
+
 	return count;
 }
 
-DEVICE_ATTR(gripsuppression, 0644, touch_gripsuppression_show, touch_gripsuppression_store);
+DEVICE_ATTR(gripsuppression, 0666, touch_gripsuppression_show, touch_gripsuppression_store);
 #endif /* FEATURE_LGE_TOUCH_GRIP_SUPPRESSION */
 
+static u8 ts_i=0;
+static u8 finger_count=0;
+static u8 ts_ret=0;
+static u8 ts_finger=0;
+static u8 ghost_count=0;
+static int ts_check=0;
+static u8 ts_esd_detect_count=0;
 
+#if TS_DEBUG
+#define DEBUG_IRQ_CNT		200
+#define DEBUG_WORK_CNT		200
 
-static /*uint8_t*/uint32_t  Synaptics_Check_Touch_Interrupt_Status()
+#define DUMMY_X_POS			0
+#define DUMMY_Y_POS			0
+
+enum {
+	TYPE_IRQ_DEBUG = 0,
+	TYPE_WORK_DEBUG
+};
+
+static void synaptics_work_debug(unsigned int x_pos, unsigned int y_pos, int type)
 {
-		uint32_t pinValue = 0;
-		pinValue = gpio_get_value(TOUCH_INT_N_GPIO);
+	static int work_cnt = DEBUG_WORK_CNT, irq_cnt = DEBUG_IRQ_CNT;
 
-		return !pinValue;
+	if(type == TYPE_IRQ_DEBUG)
+	{
+		if((++irq_cnt % DEBUG_IRQ_CNT) == 0) {
+			printk("[SHYUN] TS_IRQ\n");
+			irq_cnt = DEBUG_IRQ_CNT;
+		}
+	}
+	else if(type == TYPE_WORK_DEBUG)
+	{
+		if((++work_cnt % DEBUG_WORK_CNT) == 0) {
+			printk("[SHYUN] X:%d, Y:%d\n", x_pos, y_pos);
+			work_cnt = DEBUG_WORK_CNT;
+		}
+	}
 }
+#endif	//#if TS_DEBUG
 
-
+static void touch_reinitialize(void);
 static void synaptics_ts_work_func(struct work_struct *work)
 {
-	struct synaptics_ts_data *ts = container_of(work, struct synaptics_ts_data, work);
-	int i;
-	int finger_count = 0;
-#ifdef CONFIG_TOUCHSCREEN_ANDROID_VIRTUALKEYS
-        unsigned long timeout_jiffies = 0;
+	static bool press_flag = false;
+	int touch_cnt = 0;
+	int ret = -1;
+	p_ts = container_of(work, struct synaptics_ts_priv, work);
+
+
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2011.09.09] - Merge from Black_Froyo MR Ver.
+#if 0
+do
+{
 #endif
-	
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2011.09.09]- Merge from Black_Froyo MR Ver.
+	ts_ret = i2c_smbus_read_i2c_block_data(p_ts->client, SYNAPTICS_DATA_BASE_REG, sizeof(ts_reg_data), (u8 *)&ts_reg_data);
+	if(ts_ret < 0)
+		printk("[SHYUN] [%s-%d] i2c_error [ret = %d]!\n",__func__, __LINE__, ts_ret);
 
-	if(init_stabled != 1)
-		return;
-
-	pr_debug("[TOUCH] synaptics_ts_work_func() : START \n" );
-
-
-do{	
-
-	synaptics_ts_i2c_read_block_data(ts->client, SYNAPTICS_DATA_BASE_REG, sizeof(ts_reg_data), (u8 *)&ts_reg_data);
-	
-	
-	#if 0 
-	{
-		s32 dummy_read_byte;
-		dummy_read_byte = synaptics_ts_i2c_read_byte_data(ts->client, SYNAPTICS_2D_GESTURE_FINGER_0 );
-	}
-	#endif
-
-	
-	if(ts_reg_data.interrupt_status_reg & SYNAPTICS_INT_ABS0)
-	{
-		for(i = 0; i < SYNAPTICS_FINGER_MAX; i++)
+		for(ts_i = 0; ts_i < SYNAPTICS_FINGER_MAX; ts_i++)
 		{
-			int check = 1 << ((i%4)*2);
+			ts_check = 1 << ((ts_i%4)*2);
+			ts_finger = (u8)(ts_i/4);
 
-			prev_ts_data.touch_status[i] = curr_ts_data.touch_status[i];
-			prev_ts_data.X_position[i] = curr_ts_data.X_position[i];
-			prev_ts_data.Y_position[i] = curr_ts_data.Y_position[i];
-			prev_ts_data.width[i] = curr_ts_data.width[i];
-			prev_ts_data.pressure[i] = curr_ts_data.pressure[i];
-			
-			if((ts_reg_data.finger_state_reg[i/4] & check) == check)
+			if((ts_reg_data.finger_state_reg[ts_finger] & ts_check) == ts_check)
 			{
-				curr_ts_data.X_position[i] = (int)TS_SNTS_GET_X_POSITION(ts_reg_data.fingers_data[i][0], ts_reg_data.fingers_data[i][2]);
-				curr_ts_data.Y_position[i] = (int)TS_SNTS_GET_Y_POSITION(ts_reg_data.fingers_data[i][1], ts_reg_data.fingers_data[i][2]);
-
-
+				curr_ts_data.X_position[ts_i] = (int)TS_SNTS_GET_X_POSITION(ts_reg_data.fingers_data[ts_i][0], ts_reg_data.fingers_data[ts_i][2]);
+				curr_ts_data.Y_position[ts_i] = (int)TS_SNTS_GET_Y_POSITION(ts_reg_data.fingers_data[ts_i][1], ts_reg_data.fingers_data[ts_i][2]);
 #ifdef FEATURE_LGE_TOUCH_MOVING_IMPROVE
-				touch_adjust_position(i);
+				touch_adjust_position(ts_i);
 #endif
 
 #ifdef FEATURE_LGE_TOUCH_JITTERING_IMPROVE
-				if(!(abs(curr_ts_data.X_position[i]-prev_ts_data.X_position[i]) > 1 && abs(curr_ts_data.Y_position[i]-prev_ts_data.Y_position[i]) > 1))
+				if(!(abs(curr_ts_data.X_position[ts_i]-prev_ts_data.X_position[ts_i]) > 1 && abs(curr_ts_data.Y_position[ts_i]-prev_ts_data.Y_position[ts_i]) > 1))
 				{
-					curr_ts_data.X_position[i] = prev_ts_data.X_position[i];
-					curr_ts_data.Y_position[i] = prev_ts_data.Y_position[i];
+					curr_ts_data.X_position[ts_i] = prev_ts_data.X_position[ts_i];
+					curr_ts_data.Y_position[ts_i] = prev_ts_data.Y_position[ts_i];
 				}
 #endif
 
-
-				#ifdef FEATURE_LGE_TOUCH_GRIP_SUPPRESSION 
-				if ( (g_gripIgnoreRangeValue > 0) && ( (curr_ts_data.X_position[i] <= g_gripIgnoreRangeValue ) || 
-															(curr_ts_data.X_position[i] >= (SYNAPTICS_PANEL_MAX_X - g_gripIgnoreRangeValue) )) )
+#ifdef FEATURE_LGE_TOUCH_GRIP_SUPPRESSION
+				if ( (g_gripIgnoreRangeValue > 0) && ( (curr_ts_data.X_position[ts_i] <= g_gripIgnoreRangeValue ) ||
+															(curr_ts_data.X_position[ts_i] >= (SYNAPTICS_PANEL_MAX_X - g_gripIgnoreRangeValue) )) )
 				{
-					pr_debug("[TOUCH] Girp Region Pressed. IGNORE!!!\n" );
+					//printk("[touch] Girp Region Pressed. IGNORE!!! value : %d\n",g_gripIgnoreRangeValue);
 				}
 				else
-				#endif 
 				{
-
-					if ((((ts_reg_data.fingers_data[i][3] & 0xf0) >> 4) - (ts_reg_data.fingers_data[i][3] & 0x0f)) > 0)
-						curr_ts_data.width[i] = (ts_reg_data.fingers_data[i][3] & 0xf0) >> 4;
+#endif
+					if ((((ts_reg_data.fingers_data[ts_i][3] & 0xf0) >> 4) - (ts_reg_data.fingers_data[ts_i][3] & 0x0f)) > 0)
+						curr_ts_data.width[ts_i] = (ts_reg_data.fingers_data[ts_i][3] & 0xf0) >> 4;
 					else
-						curr_ts_data.width[i] = ts_reg_data.fingers_data[i][3] & 0x0f;
+						curr_ts_data.width[ts_i] = ts_reg_data.fingers_data[ts_i][3] & 0x0f;
 
-					curr_ts_data.pressure[i] = ts_reg_data.fingers_data[i][4];
-
-					curr_ts_data.touch_status[i] = 1;
-
+					curr_ts_data.pressure[ts_i] = ts_reg_data.fingers_data[ts_i][4];
+					curr_ts_data.touch_status[ts_i] = 1;
 					finger_count++;
 				}
 			}
 			else
 			{
-				curr_ts_data.touch_status[i] = 0;
+				curr_ts_data.touch_status[ts_i] = 0;
 			}
-		}
-		
-		for(i = 0; i < SYNAPTICS_FINGER_MAX; i++)
-		{
-			if(curr_ts_data.touch_status[i])
-			{
-				if(finger_count == 1 && i == 0)
-				{
 
+			if(curr_ts_data.touch_status[ts_i])
+			{
+				if(finger_count == 1 && !ts_i)
+				{
 #ifdef FEATURE_LGE_TOUCH_GHOST_FINGER_IMPROVE
-					 if(pressed == 0) {
-					         pressed_time = jiffies;
-					         ghost_finger_1 = 1;
-					         pressed++;
+					 if(!pressed) {
+					 	if(curr_ts_data.X_position[0]>60 && curr_ts_data.X_position[0]<970)
+					 	{
+							pressed_time = jiffies;
+							ghost_finger_1 = 1;
+					 		pressed++;
+					 	}
 					 }
 #endif
-#ifdef CONFIG_TOUCHSCREEN_ANDROID_VIRTUALKEYS
-					 curr_event_type = TOUCH_EVENT_ABS;
-#else
-					if((curr_ts_data.Y_position[i] < SYNAPTICS_PANEL_LCD_MAX_Y && prev_event_type == TOUCH_EVENT_NULL) || prev_event_type == TOUCH_EVENT_ABS)
+					if((curr_ts_data.Y_position[ts_i] < SYNAPTICS_PANEL_LCD_MAX_Y && prev_event_type == TOUCH_EVENT_NULL) || prev_event_type == TOUCH_EVENT_ABS)
 						curr_event_type = TOUCH_EVENT_ABS;
-					else if((curr_ts_data.Y_position[i] >= SYNAPTICS_PANEL_LCD_MAX_Y && prev_event_type == TOUCH_EVENT_NULL) || prev_event_type == TOUCH_EVENT_BUTTON)
+					else if((curr_ts_data.Y_position[ts_i] >= SYNAPTICS_PANEL_LCD_MAX_Y && prev_event_type == TOUCH_EVENT_NULL) || prev_event_type == TOUCH_EVENT_BUTTON)
 						curr_event_type = TOUCH_EVENT_BUTTON;
-#endif
 
 					if(curr_event_type == TOUCH_EVENT_ABS)
 					{
-#ifndef CONFIG_TOUCHSCREEN_ANDROID_VIRTUALKEYS
-						if(curr_ts_data.Y_position[i] < SYNAPTICS_PANEL_LCD_MAX_Y)
-#endif
+						if(curr_ts_data.Y_position[ts_i] < SYNAPTICS_PANEL_LCD_MAX_Y)
 						{
-#ifdef CONFIG_TOUCHSCREEN_ANDROID_VIRTUALKEYS
-                                                                        if(curr_ts_data.Y_position[i] >= SYNAPTICS_PANEL_LCD_MAX_Y) {
-										touchkey_pressed((int)((curr_ts_data.X_position[i]*4)/SYNAPTICS_PANEL_MAX_X));
-                                                                                if (!prev_ts_data.touch_status[i]) {
-                                                                                        timeout_jiffies = jiffies + msecs_to_jiffies(300);
-                                                                                } else if (time_is_after_eq_jiffies(timeout_jiffies)) {
-                                                                                        input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
-                                                                                        input_mt_sync(ts->input_dev);
-                                                                                }
-                                                                        }
+							input_report_abs(p_ts->input_dev, ABS_MT_POSITION_X, curr_ts_data.X_position[ts_i]);
+							input_report_abs(p_ts->input_dev, ABS_MT_POSITION_Y, curr_ts_data.Y_position[ts_i]);
+							input_report_abs(p_ts->input_dev, ABS_MT_TOUCH_MAJOR, curr_ts_data.pressure[ts_i]);
+							input_report_abs(p_ts->input_dev, ABS_MT_WIDTH_MAJOR, curr_ts_data.width[ts_i]);
+							input_report_key(p_ts->input_dev, BTN_TOUCH, true);
+							input_mt_sync(p_ts->input_dev);
+#if TS_DEBUG
+							synaptics_work_debug(curr_ts_data.X_position[ts_i], curr_ts_data.Y_position[ts_i], TYPE_WORK_DEBUG);
 #endif
-							input_report_abs(ts->input_dev, ABS_MT_POSITION_X, curr_ts_data.X_position[i]);
-							input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, curr_ts_data.Y_position[i]);
-							input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, curr_ts_data.pressure[i]);
-							input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR, curr_ts_data.width[i]);
-							
-							input_mt_sync(ts->input_dev);
-							pr_debug("[TOUCH-1] (X, Y) = (%d, %d), z = %d, w = %d\n", curr_ts_data.X_position[i], curr_ts_data.Y_position[i], curr_ts_data.pressure[i], curr_ts_data.width[i]);
+							//printk("[touch] (%d, %d),  melt mode=%d\n", curr_ts_data.X_position[0], curr_ts_data.Y_position[0],melt_mode);
+							if(!prev_ts_data.touch_status[ts_i]) {
+								//printk("[TS-1] [PRESS] [%d] %d:%d\n",ts_i, curr_ts_data.X_position[ts_i], curr_ts_data.Y_position[ts_i]);
+								press_flag = true;
+							}
 						}
 					}
 					else if(curr_event_type == TOUCH_EVENT_BUTTON)
 					{
-						if(curr_ts_data.Y_position[i] > SYNAPTICS_PANEL_BUTTON_MIN_Y)
+						if(curr_ts_data.Y_position[ts_i] > SYNAPTICS_PANEL_BUTTON_MIN_Y)
 						{
-							if(curr_ts_data.X_position[i] > 35 && curr_ts_data.X_position[i] < 245) //center 75
+							if(curr_ts_data.X_position[ts_i] > 35 && curr_ts_data.X_position[ts_i] < 245) //center 75
 							{
-								if(!prev_ts_data.touch_status[i])
+								if(!prev_ts_data.touch_status[ts_i])
 								{
-									input_report_key(ts->input_dev, KEY_MENU, 1); //seven blocked for key drag action
-									pr_debug("[TOUCH-2] Key Event KEY = %d, PRESS = %d\n", KEY_MENU, 1);
+									//printk("[key-touch] [KEY_MENU]\n");
+									input_report_key(p_ts->input_dev, KEY_MENU, 1); //seven blocked for key drag action
 									pressed_button_type = KEY_MENU;
 								}
 								else
 								{
 									if(pressed_button_type != KEY_MENU && pressed_button_type != KEY_REJECT)
 									{
-										input_report_key(ts->input_dev, KEY_REJECT, 1);
-										pr_debug("[TOUCH-3] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 1);
-										input_report_key(ts->input_dev, KEY_REJECT, 0);
-										pr_debug("[TOUCH] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 0);
-										input_report_key(ts->input_dev, pressed_button_type, 0);
-										pr_debug("[TOUCH-4] Key Event KEY = %d, PRESS = %d\n", pressed_button_type, 0);
+										//printk("[key-touch] [KEY_MENU]\n");
+										input_report_key(p_ts->input_dev, KEY_REJECT, 1);
+										input_report_key(p_ts->input_dev, KEY_REJECT, 0);
+										input_report_key(p_ts->input_dev, pressed_button_type, 0);
 										pressed_button_type = KEY_REJECT;
 									}
 								}
 							}
-							else if(curr_ts_data.X_position[i] > 287 && curr_ts_data.X_position[i] < 497) //center 185
+							else if(curr_ts_data.X_position[ts_i] > 287 && curr_ts_data.X_position[ts_i] < 497) //center 185
 							{
-								if(!prev_ts_data.touch_status[i])
+								if(!prev_ts_data.touch_status[ts_i])
 								{
-									input_report_key(ts->input_dev, KEY_HOME, 1); //seven blocked for key drag action
-									pr_debug("[TOUCH-5] Key Event KEY = %d, PRESS = %d\n", KEY_HOME, 1);
+									//printk("[key-touch] [KEY_HOME]\n");
+									input_report_key(p_ts->input_dev, KEY_HOME, 1); //seven blocked for key drag action
 									pressed_button_type = KEY_HOME;
 								}
 								else
 								{
 									if(pressed_button_type != KEY_HOME && pressed_button_type != KEY_REJECT)
 									{
-										input_report_key(ts->input_dev, KEY_REJECT, 1);
-										pr_debug("[TOUCH-6] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 1);
-										input_report_key(ts->input_dev, KEY_REJECT, 0);
-										pr_debug("[TOUCH-6] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 0);
-										input_report_key(ts->input_dev, pressed_button_type, 0);
-										pr_debug("[TOUCH-8] Key Event KEY = %d, PRESS = %d\n", pressed_button_type, 0);
+										//printk("[key-touch] [KEY_HOME]\n");
+										input_report_key(p_ts->input_dev, KEY_REJECT, 1);
+										input_report_key(p_ts->input_dev, KEY_REJECT, 0);
+										input_report_key(p_ts->input_dev, pressed_button_type, 0);
 										pressed_button_type = KEY_REJECT;
 									}
 								}
 							}
-							else if(curr_ts_data.X_position[i] > 539 && curr_ts_data.X_position[i] < 749) //center 295
+							else if(curr_ts_data.X_position[ts_i] > 539 && curr_ts_data.X_position[ts_i] < 749) //center 295
 							{
-								if(!prev_ts_data.touch_status[i])
+								if(!prev_ts_data.touch_status[ts_i])
 								{
-									input_report_key(ts->input_dev, KEY_BACK, 1); //seven blocked for key drag action
-									pr_debug("[TOUCH-9] Key Event KEY = %d, PRESS = %d\n", KEY_BACK, 1);
+									//printk("[key-touch] [KEY_BACK]\n");
+									input_report_key(p_ts->input_dev, KEY_BACK, 1); //seven blocked for key drag action
 									pressed_button_type = KEY_BACK;
 								}
 								else
 								{
 									if(pressed_button_type != KEY_BACK && pressed_button_type != KEY_REJECT)
 									{
-										input_report_key(ts->input_dev, KEY_REJECT, 1);
-										pr_debug("[TOUCH-10] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 1);
-										input_report_key(ts->input_dev, KEY_REJECT, 0);
-										pr_debug("[TOUCH-11] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 0);
-										input_report_key(ts->input_dev, pressed_button_type, 0);
-										pr_debug("[TOUCH-12] Key Event KEY = %d, PRESS = %d\n", pressed_button_type, 0);
+										//printk("[key-touch] [KEY_BACK]\n");
+										input_report_key(p_ts->input_dev, KEY_REJECT, 1);
+										input_report_key(p_ts->input_dev, KEY_REJECT, 0);
+										input_report_key(p_ts->input_dev, pressed_button_type, 0);
 										pressed_button_type = KEY_REJECT;
 									}
 								}
 							}
-							else if(curr_ts_data.X_position[i] > 791 && curr_ts_data.X_position[i] < 1001) //center 405
+							else if(curr_ts_data.X_position[ts_i] > 791 && curr_ts_data.X_position[ts_i] < 1001) //center 405
 							{
-								if(!prev_ts_data.touch_status[i])
+								if(!prev_ts_data.touch_status[ts_i])
 								{
-									input_report_key(ts->input_dev, KEY_SEARCH, 1); //seven blocked for key drag action
-									pr_debug("[TOUCH-13] Key Event KEY = %d, PRESS = %d\n", KEY_SEARCH, 1);
+									//printk("[key-touch] [KEY_SERACH]\n");
+									input_report_key(p_ts->input_dev, KEY_SEARCH, 1); //seven blocked for key drag action
 									pressed_button_type = KEY_SEARCH;
 								}
 								else
 								{
 									if(pressed_button_type != KEY_SEARCH && pressed_button_type != KEY_REJECT)
 									{
-										input_report_key(ts->input_dev, KEY_REJECT, 1);
-										pr_debug("[TOUCH-14] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 1);
-										input_report_key(ts->input_dev, KEY_REJECT, 0);
-										pr_debug("[TOUCH-15] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 0);
-										input_report_key(ts->input_dev, pressed_button_type, 0);
-										pr_debug("[TOUCH-16] Key Event KEY = %d, PRESS = %d\n", pressed_button_type, 0);
+										//printk("[key-touch] [KEY_SEARCH]\n");
+										input_report_key(p_ts->input_dev, KEY_REJECT, 1);
+										input_report_key(p_ts->input_dev, KEY_REJECT, 0);
+										input_report_key(p_ts->input_dev, pressed_button_type, 0);
 										pressed_button_type = KEY_REJECT;
 									}
 								}
 							}
 							else
 							{
-								if(!prev_ts_data.touch_status[i])
+								if(!prev_ts_data.touch_status[ts_i])
 								{
 									pressed_button_type = KEY_REJECT;
 								}
@@ -829,21 +801,17 @@ do{
 								{
 									if(pressed_button_type != KEY_REJECT)
 									{
-										input_report_key(ts->input_dev, KEY_REJECT, 1);
-										pr_debug("[TOUCH-17] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 1);
-										input_report_key(ts->input_dev, KEY_REJECT, 0);
-										pr_debug("[TOUCH-18] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 0);
-										input_report_key(ts->input_dev, pressed_button_type, 0);
-										pr_debug("[TOUCH-19] Key Event KEY = %d, PRESS = %d\n", pressed_button_type, 0);
+										input_report_key(p_ts->input_dev, KEY_REJECT, 1);
+										input_report_key(p_ts->input_dev, KEY_REJECT, 0);
+										input_report_key(p_ts->input_dev, pressed_button_type, 0);
 										pressed_button_type = KEY_REJECT;
 									}
 								}
 							}
-
 						}
 						else
 						{
-							if(!prev_ts_data.touch_status[i])
+							if(!prev_ts_data.touch_status[ts_i])
 							{
 								pressed_button_type = KEY_REJECT;
 							}
@@ -851,27 +819,29 @@ do{
 							{
 								if(pressed_button_type != KEY_REJECT)
 								{
-									input_report_key(ts->input_dev, KEY_REJECT, 1);
-									pr_debug("[TOUCH-20] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 1);
-									input_report_key(ts->input_dev, KEY_REJECT, 0);
-									pr_debug("[TOUCH-21] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 0);
-									input_report_key(ts->input_dev, pressed_button_type, 0);
-									pr_debug("[TOUCH-22] Key Event KEY = %d, PRESS = %d\n", pressed_button_type, 0);
+									input_report_key(p_ts->input_dev, KEY_REJECT, 1);
+									input_report_key(p_ts->input_dev, KEY_REJECT, 0);
+									input_report_key(p_ts->input_dev, pressed_button_type, 0);
 									pressed_button_type = KEY_REJECT;
 								}
 							}
 
+								input_report_abs(p_ts->input_dev, ABS_MT_POSITION_X, curr_ts_data.X_position[ts_i]);
+								input_report_abs(p_ts->input_dev, ABS_MT_POSITION_Y, curr_ts_data.Y_position[ts_i]);
+								input_report_abs(p_ts->input_dev, ABS_MT_TOUCH_MAJOR, curr_ts_data.pressure[ts_i]);
+								input_report_abs(p_ts->input_dev, ABS_MT_WIDTH_MAJOR, curr_ts_data.width[ts_i]);
+								input_report_key(p_ts->input_dev, BTN_TOUCH, true);								
 
-								input_report_abs(ts->input_dev, ABS_MT_POSITION_X, curr_ts_data.X_position[i]);
-								input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, curr_ts_data.Y_position[i]);
-								input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, curr_ts_data.pressure[i]);
-								input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR, curr_ts_data.width[i]);
-								
-								input_mt_sync(ts->input_dev);
-								pr_debug("[TOUCH-23] (X, Y) = (%d, %d), z = %d, w = %d\n", curr_ts_data.X_position[i], curr_ts_data.Y_position[i], curr_ts_data.pressure[i], curr_ts_data.width[i]);
+								input_mt_sync(p_ts->input_dev);
+#if TS_DEBUG
+								synaptics_work_debug(curr_ts_data.X_position[ts_i], curr_ts_data.Y_position[ts_i], TYPE_WORK_DEBUG);
+#endif
+								if(!prev_ts_data.touch_status[ts_i]) {
+									//printk("[TS-2] [PRESS] [%d] %d:%d\n",ts_i, curr_ts_data.X_position[ts_i], curr_ts_data.Y_position[ts_i]);
+									press_flag = true;
+								}
 
 								curr_event_type = TOUCH_EVENT_ABS;
-
 						}
 					}
 					else
@@ -879,7 +849,6 @@ do{
 						curr_event_type = TOUCH_EVENT_NULL;
 						pressed_button_type = KEY_REJECT;
 					}
-					//break; 
 				}
 				else // multi-finger
 				{
@@ -887,72 +856,74 @@ do{
 
 					if(pressed_button_type != KEY_REJECT)
 					{
-						input_report_key(ts->input_dev, KEY_REJECT, 1);
-						pr_debug("[TOUCH-24] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 1);
-						input_report_key(ts->input_dev, KEY_REJECT, 0);
-						pr_debug("[TOUCH-25] Key Event KEY = %d, PRESS = %d\n", KEY_REJECT, 0);
-						input_report_key(ts->input_dev, pressed_button_type, 0);
-						pr_debug("[TOUCH-26] Key Event KEY = %d, PRESS = %d\n", pressed_button_type, 0);
+						input_report_key(p_ts->input_dev, KEY_REJECT, 1);
+						input_report_key(p_ts->input_dev, KEY_REJECT, 0);
+						input_report_key(p_ts->input_dev, pressed_button_type, 0);
 						pressed_button_type = KEY_REJECT;
 					}
 
-					if(curr_ts_data.Y_position[i] < SYNAPTICS_PANEL_LCD_MAX_Y)
+					if(curr_ts_data.Y_position[ts_i] < SYNAPTICS_PANEL_LCD_MAX_Y)
 					{
-						input_report_abs(ts->input_dev, ABS_MT_POSITION_X, curr_ts_data.X_position[i]);
-						input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, curr_ts_data.Y_position[i]);
-						input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, curr_ts_data.pressure[i]);
-						input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR, curr_ts_data.width[i]);
+						input_report_abs(p_ts->input_dev, ABS_MT_POSITION_X, curr_ts_data.X_position[ts_i]);
+						input_report_abs(p_ts->input_dev, ABS_MT_POSITION_Y, curr_ts_data.Y_position[ts_i]);
+						input_report_abs(p_ts->input_dev, ABS_MT_TOUCH_MAJOR, curr_ts_data.pressure[ts_i]);
+						input_report_abs(p_ts->input_dev, ABS_MT_WIDTH_MAJOR, curr_ts_data.width[ts_i]);
+						input_report_key(p_ts->input_dev, BTN_TOUCH, true);						
 
-						input_mt_sync(ts->input_dev);
-
-						
-#ifdef FEATURE_LGE_TOUCH_GHOST_FINGER_IMPROVE
-						if(curr_ts_data.X_position[1] || curr_ts_data.Y_position[1])
-							ghost_count=0; 
+						input_mt_sync(p_ts->input_dev);
+#if TS_DEBUG
+						synaptics_work_debug(curr_ts_data.X_position[ts_i], curr_ts_data.Y_position[ts_i], TYPE_WORK_DEBUG);
 #endif
+						if(!prev_ts_data.touch_status[ts_i]) {
+							//printk("[TS-3] [PRESS] [%d] %d:%d\n",ts_i, curr_ts_data.X_position[ts_i], curr_ts_data.Y_position[ts_i]);
+							press_flag = true;
+						}
 						
-						
-						pr_debug("[TOUCH-27] (X, Y) = (%d, %d), z = %d, w = %d\n", curr_ts_data.X_position[i], curr_ts_data.Y_position[i], curr_ts_data.pressure[i], curr_ts_data.width[i]);
+						if(curr_ts_data.X_position[1] || curr_ts_data.Y_position[1]) ghost_count=0;
 					}
 				}
 			}
 			else
 			{
-				if(pressed_button_type != KEY_REJECT && i == 0)
-				{					
-					input_report_key(ts->input_dev, pressed_button_type, 0);
-                                        
-					if (system_rev >= 3)
-					{
-						switch(pressed_button_type)
-						{
-							case KEY_MENU:
-								touchkey_pressed(MENU);
-								break;
-							case KEY_HOME:
-								touchkey_pressed(HOME);
-								break;
-							case KEY_BACK:
-								touchkey_pressed(BACK);
-								break;
-							case KEY_SEARCH:
-								touchkey_pressed(SEARCH);
-								break;
-						}
-					}
-					else
-					{
-							pr_debug("Touch Key LED is working at over Rev.C\n");
-					}
-                                        
-					pr_debug("[TOUCH-28] Key Event KEY = %d, PRESS = %d\n", pressed_button_type, 0);
+				if(pressed_button_type != KEY_REJECT && !ts_i)
+				{
+					input_report_key(p_ts->input_dev, pressed_button_type, 0);
+                                                switch(pressed_button_type)
+                                                {
+                                                        case KEY_MENU:
+                                                                touchkey_pressed(MENU);
+                                                                break;
+                                                        case KEY_HOME:
+                                                                touchkey_pressed(HOME);
+                                                                break;
+                                                        case KEY_BACK:
+                                                                touchkey_pressed(BACK);
+                                                                break;
+                                                        case KEY_SEARCH:
+                                                                touchkey_pressed(SEARCH);
+                                                                break;
+                                                }
+
 					pressed_button_type = KEY_REJECT;
 				}
 			}
+			
+			prev_ts_data.touch_status[ts_i] = curr_ts_data.touch_status[ts_i];
+			prev_ts_data.X_position[ts_i] = curr_ts_data.X_position[ts_i];
+			prev_ts_data.Y_position[ts_i] = curr_ts_data.Y_position[ts_i];
+			prev_ts_data.width[ts_i] = curr_ts_data.width[ts_i];
+			prev_ts_data.pressure[ts_i] = curr_ts_data.pressure[ts_i];
 		}
-		
-		if(finger_count == 0)
+
+		if(!finger_count)
 		{
+			if(prev_event_type != TOUCH_EVENT_BUTTON) {
+				if(press_flag == true) {
+					//printk("[TS] [RELEASE]\n");
+					press_flag = false;
+				}
+			}
+
 			prev_event_type = TOUCH_EVENT_NULL;
 		}
 		else
@@ -961,77 +932,145 @@ do{
 		}
 
 #ifdef FEATURE_LGE_TOUCH_GHOST_FINGER_IMPROVE
-
-		if(melt_mode == 0) {			
-
-				if(pressed) {
-
-						if( TS_SNTS_GET_FINGER_STATE_1(ts_reg_data.finger_state_reg[0]) == 1 ||
-								TS_SNTS_GET_FINGER_STATE_2(ts_reg_data.finger_state_reg[0]) == 1 ||
-								TS_SNTS_GET_FINGER_STATE_3(ts_reg_data.finger_state_reg[0]) == 1 ||
-								TS_SNTS_GET_FINGER_STATE_0(ts_reg_data.finger_state_reg[1]) == 1 ||
-								TS_SNTS_GET_FINGER_STATE_1(ts_reg_data.finger_state_reg[1]) == 1 ||
-								TS_SNTS_GET_FINGER_STATE_2(ts_reg_data.finger_state_reg[1]) == 1 ||
-								TS_SNTS_GET_FINGER_STATE_3(ts_reg_data.finger_state_reg[1]) == 1 ||
-								TS_SNTS_GET_FINGER_STATE_0(ts_reg_data.finger_state_reg[2]) == 1 ||
-								TS_SNTS_GET_FINGER_STATE_1(ts_reg_data.finger_state_reg[2]) == 1 ) {
-
-										ghost_finger_2 = 1; 					
-						}
+		if(!melt_mode && melt_flag) 
+		{
+			if(pressed) 
+			{
+				if( TS_SNTS_GET_FINGER_STATE_1(ts_reg_data.finger_state_reg[0]) == 1 ||
+					TS_SNTS_GET_FINGER_STATE_2(ts_reg_data.finger_state_reg[0]) == 1 ||
+					TS_SNTS_GET_FINGER_STATE_3(ts_reg_data.finger_state_reg[0]) == 1 ||
+					TS_SNTS_GET_FINGER_STATE_0(ts_reg_data.finger_state_reg[1]) == 1 ||
+					TS_SNTS_GET_FINGER_STATE_1(ts_reg_data.finger_state_reg[1]) == 1 ||
+					TS_SNTS_GET_FINGER_STATE_2(ts_reg_data.finger_state_reg[1]) == 1 ||
+					TS_SNTS_GET_FINGER_STATE_3(ts_reg_data.finger_state_reg[1]) == 1 ||
+					TS_SNTS_GET_FINGER_STATE_0(ts_reg_data.finger_state_reg[2]) == 1 ||
+					TS_SNTS_GET_FINGER_STATE_1(ts_reg_data.finger_state_reg[2]) == 1 ) 
+				{
+					ghost_finger_2 = 1;
 				}
-
-				if((TS_SNTS_GET_FINGER_STATE_0(ts_reg_data.finger_state_reg[0]) == 0) && ghost_finger_1 == 1 && ghost_finger_2 == 0 && pressed == 1) {
-				
-						if(jiffies - pressed_time < 2 * HZ) {
-							ghost_count++;
-							if (ghost_count > 0/*3*/) 
-							{
-								synaptics_ts_i2c_write_byte_data(ts->client, MELT_CONTROL, NO_MELT);
-								pr_warning("Touch NO_MELT\n");
-								ghost_count = 0;
-								melt_mode++;
-							}
-						}
-
-						ghost_finger_1 = 0;
-						pressed = 0;
-				}		
-		
-				if( TS_SNTS_GET_FINGER_STATE_0(ts_reg_data.finger_state_reg[0]) == 0 &&
-						TS_SNTS_GET_FINGER_STATE_1(ts_reg_data.finger_state_reg[0]) == 0 &&
-						TS_SNTS_GET_FINGER_STATE_2(ts_reg_data.finger_state_reg[0]) == 0 &&
-						TS_SNTS_GET_FINGER_STATE_3(ts_reg_data.finger_state_reg[0]) == 0 &&
-						TS_SNTS_GET_FINGER_STATE_0(ts_reg_data.finger_state_reg[1]) == 0 &&
-						TS_SNTS_GET_FINGER_STATE_1(ts_reg_data.finger_state_reg[1]) == 0 &&
-						TS_SNTS_GET_FINGER_STATE_2(ts_reg_data.finger_state_reg[1]) == 0 &&
-						TS_SNTS_GET_FINGER_STATE_3(ts_reg_data.finger_state_reg[1]) == 0 &&
-						TS_SNTS_GET_FINGER_STATE_0(ts_reg_data.finger_state_reg[2]) == 0 &&
-						TS_SNTS_GET_FINGER_STATE_1(ts_reg_data.finger_state_reg[2]) == 0 ) {
-
-								ghost_finger_1 = 0;
-								ghost_finger_2 = 0;
-								pressed = 0;
-				}				
-		}						
-
+			}
+            if((TS_SNTS_GET_FINGER_STATE_0(ts_reg_data.finger_state_reg[0]) == 0) && ghost_finger_1 == 1 && ghost_finger_2 == 0 && pressed == 1)
+            {
+	            if(jiffies - pressed_time < 2 * HZ) 
+	            {
+                	ghost_count++;
+            
+                    if(ghost_count > 3) 
+                    {
+                    	mdelay(30);
+                    	i2c_smbus_write_byte_data(p_ts->client, MELT_CONTROL, NO_MELT);
+                        ghost_count = 0;
+                        melt_mode++;
+                    }
+				}
+            	ghost_finger_1 = 0;
+            	pressed = 0;
+			}
+			if( !TS_SNTS_GET_FINGER_STATE_0(ts_reg_data.finger_state_reg[0]) &&
+				!TS_SNTS_GET_FINGER_STATE_1(ts_reg_data.finger_state_reg[0]) &&
+				!TS_SNTS_GET_FINGER_STATE_2(ts_reg_data.finger_state_reg[0]) &&
+				!TS_SNTS_GET_FINGER_STATE_3(ts_reg_data.finger_state_reg[0]) &&
+				!TS_SNTS_GET_FINGER_STATE_0(ts_reg_data.finger_state_reg[1]) &&
+				!TS_SNTS_GET_FINGER_STATE_1(ts_reg_data.finger_state_reg[1]) &&
+				!TS_SNTS_GET_FINGER_STATE_2(ts_reg_data.finger_state_reg[1]) &&
+				!TS_SNTS_GET_FINGER_STATE_3(ts_reg_data.finger_state_reg[1]) &&
+				!TS_SNTS_GET_FINGER_STATE_0(ts_reg_data.finger_state_reg[2]) &&
+				!TS_SNTS_GET_FINGER_STATE_1(ts_reg_data.finger_state_reg[2])) 
+			{
+				ghost_finger_1 = 0;
+				ghost_finger_2 = 0;
+				pressed = 0;
+			}
+		}
 #endif
+	finger_count=0;
+	input_mt_sync(p_ts->input_dev);
+	input_sync(p_ts->input_dev);
 
+	//printk("[touch](%d, %d),(%d, %d) melt_mode=%d, esd=%d\n", curr_ts_data.X_position[0], curr_ts_data.Y_position[0],curr_ts_data.X_position[1], curr_ts_data.Y_position[1],!melt_mode,ts_esd_reset);
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2011.09.09] - Merge from Black_Froyo MR Ver.
+#if 0
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2011.09.09]- Merge from Black_Froyo MR Ver.
+	if(!ts_reg_data.fingers_data[0][4])
+	{
+		if(!ts_esd_detect_flag && init_stabled==1 && !curr_ts_data.X_position[0] && !curr_ts_data.Y_position[0] && !curr_ts_data.X_position[1] && !curr_ts_data.Y_position[1])
+		{
+			ts_esd_detect_count++;
+			if(ts_esd_detect_count>2 && init_stabled==1)
+			{
+				ts_esd_detect_flag=1;
+				ts_esd_detect_count=0;
+			}
+		}
+		else
+			ts_esd_detect_count=0;
 	}
+	else
+		ts_esd_detect_count=0;
+#endif
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2012.04.02] - Do not Turn on Keyled in Kernel.
+//	if(init_stabled && !key_led_flag)	bd2802_touch_on();
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2012.04.02]- Do not Turn on Keyled in Kernel.
+	
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2011.09.09] - Merge from Black_Froyo MR Ver.
+#if 0
+	for(ts_ret=0;ts_ret<100;ts_ret++)
+	{
+		if(!gpio_get_value(TOUCH_INT_N_GPIO))	 i2c_smbus_read_i2c_block_data(p_ts->client, 0x14, 1, &dummy);
+		else									 break;
+	}
+	if(ts_ret>=100)	
+	{ 
+		printk("[touch] TOUCH_INT_N_GPIO is LOW. touch lock up!!\n");
+		touch_reinitialize();
+		printk("[touch] TOUCH LockUP Fixed!!\n");
+	}
+#else
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2012.08.21] - Touch lock-up fix process.
+	for(touch_cnt = 0;touch_cnt <= 100;touch_cnt++)
+	{
+		if(touch_cnt == 100) {
+			printk("[touch] TOUCH_INT_N_GPIO is LOW. touch lock up!!\n");
+			touch_reinitialize();
+			printk("[touch] TOUCH LockUP Fixed!!\n");
 
-	input_mt_sync(ts->input_dev);
-	input_sync(ts->input_dev);
+			touch_cnt = 0;
 
-}while(Synaptics_Check_Touch_Interrupt_Status());
+			break;
+		}
+
+		if(!gpio_get_value(TOUCH_INT_N_GPIO)) {
+			ret = i2c_smbus_read_i2c_block_data(p_ts->client, 0x14, 1, &dummy);
+			if(ret < 0)
+				printk("[SHYUN] [%s-%d] i2c_error! [ret = %d]\n",__func__, __LINE__, ret);
+
+			touch_cnt++;
+		}
+		else {
+			break;
+		}
+	}
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2012.08.21]- Touch lock-up fix process.
+#endif
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2011.09.09]- Merge from Black_Froyo MR Ver.
+
+	memset(&curr_ts_data, 0x0, sizeof(ts_finger_data));
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2011.09.09] - Merge from Black_Froyo MR Ver.
+#if 0
+}
+while(!gpio_get_value(TOUCH_INT_N_GPIO));
+#endif
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2011.09.09]- Merge from Black_Froyo MR Ver.
 
 SYNAPTICS_TS_IDLE:
-	if (ts->use_irq) {		
-		enable_irq(ts->client->irq);
+	if (p_ts->use_irq) {
+		enable_irq(p_ts->client->irq);
 	}
 }
 
 static enum hrtimer_restart synaptics_ts_timer_func(struct hrtimer *timer)
 {
-	struct synaptics_ts_data *ts = container_of(timer, struct synaptics_ts_data, timer);
+	struct synaptics_ts_priv *ts = container_of(timer, struct synaptics_ts_priv, timer);
 
 	queue_work(synaptics_wq, &ts->work);
 	hrtimer_start(&ts->timer, ktime_set(0, 12500000), HRTIMER_MODE_REL); /* 12.5 msec */
@@ -1041,79 +1080,36 @@ static enum hrtimer_restart synaptics_ts_timer_func(struct hrtimer *timer)
 
 static irqreturn_t synaptics_ts_irq_handler(int irq, void *dev_id)
 {
-	struct synaptics_ts_data *ts = dev_id;
-#ifdef CONFIG_LGE_DVFS
-	int ds_cpu = smp_processor_id();
-	unsigned long touch_interval;
-#endif// CONFIG_LGE_DVFS
-
 	//pr_info("LGE: synaptics_ts_irq_handler\n");
-	disable_irq_nosync(ts->client->irq);
+	disable_irq_nosync(p_ts->client->irq);
 
-	queue_work(synaptics_wq, &ts->work);
-
-#ifdef CONFIG_LGE_DVFS
-	if(ds_control.flag_run_dvs == 1)
-	{
-		if(ds_cpu == 0){
-			if(per_cpu(ds_sys_status, 0).flag_consecutive_touches == 0){
-				if(per_cpu(ds_counter, ds_cpu).elapsed_sec < 
-				   per_cpu(ds_sys_status, 0).new_touch_sec + 2)
-				{
-					touch_interval = (per_cpu(ds_counter, ds_cpu).elapsed_sec -
-							  per_cpu(ds_sys_status, 0).new_touch_sec) * 1000000 +
-						(per_cpu(ds_counter, ds_cpu).elapsed_usec -
-						 per_cpu(ds_sys_status, 0).new_touch_usec);
-					if(touch_interval <= DS_CONT_TOUCH_THRESHOLD_USEC)
-					{
-						if(per_cpu(ds_sys_status, 0).flag_consecutive_touches == 0){
-							per_cpu(ds_sys_status, 0).first_consecutive_touch_sec =
-								per_cpu(ds_counter, ds_cpu).elapsed_sec;
-						}
-						per_cpu(ds_sys_status, 0).flag_consecutive_touches = 1;
+/* 20110331 sookyoung.kim@lge.com LG-DVFS [START_LGE] */
+/* Move this code later to somewhere common, such as the irq entry point.
+ */
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2012.03.20] - This feature is disabled.
+#if 0
+	if(ds_status.flag_run_dvs == 1){
+        ds_status.flag_touch_timeout_count = DS_TOUCH_TIMEOUT_COUNT_MAX;    // = 6
+        if(ds_status.touch_timeout_sec == 0){
+            if(ds_counter.elapsed_usec + DS_TOUCH_TIMEOUT < 1000000){
+                ds_status.touch_timeout_sec = ds_counter.elapsed_sec;
+                ds_status.touch_timeout_usec = ds_counter.elapsed_usec + DS_TOUCH_TIMEOUT;
             }
+            else{
+                ds_status.touch_timeout_sec = ds_counter.elapsed_sec + 1;
+                ds_status.touch_timeout_usec = (ds_counter.elapsed_usec + DS_TOUCH_TIMEOUT) - 1000000;
             }
         }
-			per_cpu(ds_sys_status, 0).new_touch_sec = 
-				per_cpu(ds_counter, ds_cpu).elapsed_sec;
-			per_cpu(ds_sys_status, 0).new_touch_usec = 
-				per_cpu(ds_counter, ds_cpu).elapsed_usec;
-			
-			if(per_cpu(ds_sys_status, 0).flag_consecutive_touches == 0){
-				per_cpu(ds_sys_status, 0).flag_touch_timeout_count = 
-					DS_TOUCH_CPU_OP_UP_CNT_MAX;
-				if((per_cpu(ds_counter, ds_cpu).elapsed_usec + 
-				    DS_TOUCH_CPU_OP_UP_INTERVAL) < 1000000)
-				{
-					per_cpu(ds_sys_status, 0).touch_timeout_sec = 
-						per_cpu(ds_counter, ds_cpu).elapsed_sec;
-					per_cpu(ds_sys_status, 0).touch_timeout_usec = 
-						per_cpu(ds_counter, ds_cpu).elapsed_usec + 
-						DS_TOUCH_CPU_OP_UP_INTERVAL;
-				}
-				else{
-					per_cpu(ds_sys_status, 0).touch_timeout_sec = 
-						per_cpu(ds_counter, ds_cpu).elapsed_sec + 1;
-					per_cpu(ds_sys_status, 0).touch_timeout_usec = 
-						(per_cpu(ds_counter, ds_cpu).elapsed_usec + 
-						 DS_TOUCH_CPU_OP_UP_INTERVAL) - 1000000;
-				}
     }
+#endif
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2012.03.20]- This feature is disabled.
+/* 20110331 sookyoung.kim@lge.com LG-DVFS [END_LGE] */
 
-			if(per_cpu(ds_sys_status, 0).flag_consecutive_touches == 1){
-				if(per_cpu(ds_sys_status, 0).flag_long_consecutive_touches == 0){
-					if(per_cpu(ds_counter, ds_cpu).elapsed_sec > 
-					   (per_cpu(ds_sys_status, 0).first_consecutive_touch_sec + 
-					    DS_CONT_TOUCH_CARE_WAIT_SEC))
-					{
-						per_cpu(ds_sys_status, 0).flag_long_consecutive_touches = 1;
-					}
-				}
-			}
-		}
-	}
-#endif// CONFIG_LGE_DVFS
+#if TS_DEBUG
+	synaptics_work_debug(DUMMY_X_POS, DUMMY_X_POS, TYPE_IRQ_DEBUG);
+#endif	
 
+	queue_work(synaptics_wq, &p_ts->work);
 	return IRQ_HANDLED;
 }
 
@@ -1125,34 +1121,319 @@ static unsigned char synaptics_ts_check_fwver(struct i2c_client *client)
 
 	unsigned char SynapticsFirmVersion;
 
-	RMI_Query_BaseAddr = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_RMI_QUERY_BASE_REG);
+	RMI_Query_BaseAddr = i2c_smbus_read_byte_data(client, SYNAPTICS_RMI_QUERY_BASE_REG);
 	FWVersion_Addr = RMI_Query_BaseAddr+3;
-	
-	SynapticsFirmVersion = synaptics_ts_i2c_read_byte_data(client, FWVersion_Addr);
-	pr_debug("[TOUCH] Touch controller Firmware Version = %x\n", SynapticsFirmVersion);
+
+	SynapticsFirmVersion = i2c_smbus_read_byte_data(client, FWVersion_Addr);
+	printk("[touch] touch controller firmware version = %x\n", SynapticsFirmVersion);
 
 	return SynapticsFirmVersion;
 }
 
+//#define MUX_PARTITION_BASE	0xFA002030
+//#define MUX_GPIO_35			(MUX_PARTITION_BASE + MUX_GPIO_35_OFFSET)
+#define MUX_GPIO_35_OFFSET	0x4C
+static u32 get_mux_base(void)
+{
+	struct omap_mux *mux;
+	u32 mux_base;
+
+	mux = omap_mux_get_gpio(TOUCH_INT_N_GPIO);
+
+	mux_base = (u32)mux->partition->base;
+
+	return mux_base;
+}
+
+static u16 touch_get_mux(void)
+{
+	u32 mux_base = get_mux_base();
+
+	return __raw_readw(mux_base + MUX_GPIO_35_OFFSET);
+}
+
+static void touch_set_mux_input(void)
+{
+	u32 mux_base = get_mux_base();
+
+	__raw_writew((OMAP_PIN_INPUT | OMAP_WAKEUP_EN | OMAP_OFFOUT_EN | OMAP_MUX_MODE4), (mux_base + MUX_GPIO_35_OFFSET));
+}
+
+static void touch_set_mode0_input(void)
+{
+	u32 mux_base = get_mux_base();
+
+	__raw_writew((OMAP_PIN_INPUT | OMAP_WAKEUP_EN | OMAP_OFFOUT_EN | OMAP_MUX_MODE0), (mux_base + MUX_GPIO_35_OFFSET));
+}
+
+static void touch_set_mux_output(void)
+{
+	u32 mux_base = get_mux_base();
+
+	__raw_writew((OMAP_MUX_MODE4 | OMAP_PIN_OUTPUT), (mux_base + MUX_GPIO_35_OFFSET));
+}
+
+static int touch_set_mux(void)
+{
+	int ret = -1;
+	
+	ret = omap_mux_init_signal("gpio_35", OMAP_PIN_INPUT | OMAP_WAKEUP_EN | OMAP_OFFOUT_EN);
+	if(ret < 0)
+		printk("[SHYUN] touch_set_mux error [%d]\n",ret);
+
+	ret = gpio_direction_input(TOUCH_INT_N_GPIO);
+	if(ret < 0)
+		printk("[SHYUN] gpio_direction_input error [%d]\n",ret);
+
+	ret = gpio_set_debounce(TOUCH_INT_N_GPIO, 0xa);
+	if(ret < 0)
+		printk("[SHYUN] gpio_set_debounce error [%d]\n",ret);
+
+	return ret;
+}
+
+#define AAT2870_LDO_EN_LDOC		(1 << 2)
+#define AAT2870_LDO_EN_LDOD		(1 << 3)
+#define AAT2870_LDO_EN_REG		0x26
+
+#define AAT2870_LDOCD_REG		0x25
+
+static u8 touch_get_ldo_en_status(void)
+{
+	return aat2870_touch_ldo_read(AAT2870_LDO_EN_REG);
+}
+
+static u8 touch_get_ldo_status(void)
+{
+	return aat2870_touch_ldo_read(AAT2870_LDOCD_REG);
+}
+
+static void touch_power_off(void)
+{
+	aat2870_touch_ldo_write(AAT2870_LDOCD_REG , 0x00);
+
+	mdelay(50);
+}
+
+static void touch_power_on(void)
+{
+	aat2870_touch_ldo_write(AAT2870_LDOCD_REG , 0x00);
+	mdelay(50);
+
+	aat2870_touch_ldo_write(AAT2870_LDOCD_REG , 0x4C);
+	mdelay(30);
+}
+
+static void touch_reinitialize(void)
+{
+	int ret = -1;
+	u16 mux = 0x0;
+	int f_gpio_val = -1, l_gpio_val = -1;
+
+	f_gpio_val = gpio_get_value(TOUCH_INT_N_GPIO);
+
+	touch_set_mux_input();
+
+	ret = gpio_direction_input(TOUCH_INT_N_GPIO);
+	if(ret < 0)
+		printk("[SHYUN] gpio_direction_input error [%d]\n",ret);
+
+	ret = gpio_set_debounce(TOUCH_INT_N_GPIO, 0xa);
+	if(ret < 0)
+		printk("[SHYUN] gpio_set_debounce error [%d]\n",ret);
+
+	touch_power_on();
+
+	//synaptics_ts_initialize();
+	schedule_delayed_work(&p_ts->init_delayed_work, msecs_to_jiffies(400));
+
+	mux = touch_get_mux();
+
+	l_gpio_val = gpio_get_value(TOUCH_INT_N_GPIO);
+
+	printk("[SHYUN] f_gpio = %d / l_gpio = %d / mux_val = 0x%x\n",f_gpio_val, l_gpio_val, mux);
+	
+}
 
 static ssize_t hub_ts_FW_show(struct device *dev,  struct device_attribute *attr,  char *buf)
 {
 	int r;
+	u16 mux_val = 0x0;
+	int gpio_val = 0x0;
 
-	r = snprintf(buf, PAGE_SIZE,
-		"%d\n", touch_fw_version);
+	r = snprintf(buf, PAGE_SIZE,"%d\n", touch_fw_version);
 
+	mux_val = touch_get_mux();
+
+	gpio_val = gpio_get_value(TOUCH_INT_N_GPIO);
+
+	printk("[SHYUN] omap_mux_read = 0x%x / gpio_val = %d\n",mux_val, gpio_val);
+
+	printk("================== SYSFS SUPPORT COMMAND ===============\n");
+	printk("[0] SYSFS_TOUCH_POWER_OFF\n");
+	printk("[1] SYSFS_TOUCH_POWER_ON\n");
+	printk("[2] SYSFS_TOUCH_PROCESS_INIT\n");
+	printk("[3] SYSFS_TOUCH_POWER_OFF_ON_PROCESS_INIT\n");
+	printk("[4] SYSFS_TOUCH_MUX_INIT\n");
+	printk("[5] SYSFS_TOUCH_FULL_INIT\n");
+	printk("[6] SYSFS_TOUCH_OUTPUT_TEST\n");
+	printk("[7] SYSFS_TOUCH_SET_INPUT\n");
+	printk("[8] SYSFS_TOUCH_REINITIALIZE\n");
+	printk("[9] SYSFS_TOUCH_SET_INPUT_MODE0\n");
+	printk("[10] SYSFS_TOUCH_GET_LDO\n");
+	printk("[11] SYSFS_TOUCH_DISABLE_IRQ\n");
+	printk("[12] SYSFS_TOUCH_ENABLE_IRQ\n");
+	printk("[13] 3SYSFS_TOUCH_GET_IRQ_DEPTH\n");
+	printk("========================================================\n");
+	
 	return r;
-
 }
 
-static DEVICE_ATTR(fw, 0666, hub_ts_FW_show, NULL);
+enum {
+	SYSFS_TOUCH_POWER_OFF = 0,				// 0
+	SYSFS_TOUCH_POWER_ON,					// 1
+	SYSFS_TOUCH_PROCESS_INIT,				// 2
+	SYSFS_TOUCH_POWER_OFF_ON_PROCESS_INIT,	// 3
+	SYSFS_TOUCH_MUX_INIT,					// 4
+	SYSFS_TOUCH_FULL_INIT,					// 5
+	SYSFS_TOUCH_OUTPUT_TEST,				// 6
+	SYSFS_TOUCH_SET_INPUT,					// 7
+	SYSFS_TOUCH_REINITIALIZE,				// 8
+	SYSFS_TOUCH_SET_INPUT_MODE0,			// 9
+	SYSFS_TOUCH_GET_LDO,					// 10
+	SYSFS_TOUCH_DISABLE_IRQ,				// 11
+	SYSFS_TOUCH_ENABLE_IRQ,					// 12
+	SYSFS_TOUCH_GET_IRQ_DEPTH,				// 13
+};
+
+ssize_t hub_ts_FW_store(struct device *dev, struct device_attribute *attr, const char *buffer, size_t count)
+{
+	int store_value = 0;
+	u8 touch_ldo_val, touch_ldo_en_status;
+	
+	sscanf(buffer, "%d", &store_value);
+
+
+	switch(store_value)
+	{
+		case SYSFS_TOUCH_POWER_OFF:
+		{
+			touch_power_off();
+			
+			printk("[SHYUN] Touch-LDO OFF!\n");
+			break;
+		}
+		case SYSFS_TOUCH_POWER_ON:
+		{
+			touch_power_on();
+			
+			printk("[SHYUN] Touch-LDO ON!\n");
+			break;
+		}
+		case SYSFS_TOUCH_PROCESS_INIT:
+		{
+			//synaptics_ts_initialize();
+			schedule_delayed_work(&p_ts->init_delayed_work, msecs_to_jiffies(400));
+			printk("[SHYUN] Touch Process Initialize!\n");
+			break;
+		}
+		case SYSFS_TOUCH_POWER_OFF_ON_PROCESS_INIT:
+		{
+			touch_power_off();
+			touch_power_on();
+
+			//synaptics_ts_initialize();
+			schedule_delayed_work(&p_ts->init_delayed_work, msecs_to_jiffies(400));
+			
+			printk("[SHYUN] Touch Power Off/On & Initialize!\n");
+			
+			break;
+		}
+		case SYSFS_TOUCH_MUX_INIT:
+		{
+			touch_set_mux();
+
+			printk("[SHYUN] Touch Mux Initizlize!\n");
+			break;
+		}
+		case SYSFS_TOUCH_FULL_INIT:
+		{
+			touch_set_mux();
+
+			touch_power_off();
+			touch_power_on();
+
+			//synaptics_ts_initialize();
+			schedule_delayed_work(&p_ts->init_delayed_work, msecs_to_jiffies(400));
+		
+			printk("[SHYUN] Touch Power Off/On & Initialize & mux reset!\n");
+
+			break;
+		}
+		case SYSFS_TOUCH_OUTPUT_TEST:
+		{
+			touch_set_mux_output();
+
+			printk("[SHYUN] Touch N Gpio Output Test Setting!\n");
+			break;
+		}
+		case SYSFS_TOUCH_SET_INPUT:
+		{
+			touch_set_mux_input();
+
+			printk("[SHYUN] Touch Mux Set Input!\n");
+			break;
+		}
+		case SYSFS_TOUCH_REINITIALIZE:
+		{
+			touch_reinitialize();
+			break;
+		}
+		case SYSFS_TOUCH_SET_INPUT_MODE0:
+		{
+			printk("[SHYUN] Touch Mux Set Input/Mode0!\n");
+			touch_set_mode0_input();
+			break;
+		}
+		case SYSFS_TOUCH_GET_LDO:
+		{
+			touch_ldo_val = touch_get_ldo_status();
+			touch_ldo_en_status = touch_get_ldo_en_status();
+
+			printk("[SHYUN] SYSFS_TOUCH_GET_LDO [ EN = 0x%x / LDO = 0x%x ]\n",touch_ldo_en_status, touch_ldo_val);
+			break;
+		}
+		case SYSFS_TOUCH_DISABLE_IRQ:
+		{
+			disable_irq(p_ts->client->irq);
+			printk("[SHYUN_TS] disable_irq(%d)\n", p_ts->client->irq);
+			break;
+		}
+		case SYSFS_TOUCH_ENABLE_IRQ:
+		{
+			enable_irq(p_ts->client->irq);
+			printk("[SHYUN_TS] enable_irq(%d)\n", p_ts->client->irq);
+			break;
+		}
+		case SYSFS_TOUCH_GET_IRQ_DEPTH:
+		{
+			printk("[SHYUN_TS] depth_count = %d\n",synaptics_irq_depth_count());
+			break;
+		}
+		default:
+			printk("[SHYUN] FW_store function error!\n");
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR(fw, 0666, hub_ts_FW_show, hub_ts_FW_store);
 
 
 
 
 #ifdef SYNAPTICS_SUPPORT_FW_UPGRADE
-static unsigned long ExtractLongFromHeader(const unsigned char *SynaImage)  // Endian agnostic 
+static unsigned long ExtractLongFromHeader(const unsigned char *SynaImage)  // Endian agnostic
 {
   return((unsigned long)SynaImage[0] +
          (unsigned long)SynaImage[1]*0x100 +
@@ -1173,31 +1454,30 @@ static void CalculateChecksum(uint16_t *data, uint16_t len, uint32_t *dataBlock)
 
   while (len--)
   {
-    sum1 += temp;    
-    sum2 += sum1;    
-    sum1 = (sum1 & 0xffff) + (sum1 >> 16);    
+    sum1 += temp;
+    sum2 += sum1;
+    sum1 = (sum1 & 0xffff) + (sum1 >> 16);
     sum2 = (sum2 & 0xffff) + (sum2 >> 16);
   }
 
   *dataBlock = sum2 << 16 | sum1;
 }
 
-static void SpecialCopyEndianAgnostic(uint8_t *dest, uint16_t src) 
+static void SpecialCopyEndianAgnostic(uint8_t *dest, uint16_t src)
 {
   dest[0] = src%0x100;  //Endian agnostic method
-  dest[1] = src/0x100;  
+  dest[1] = src/0x100;
 }
 
 
 static bool synaptics_ts_fw_upgrade(struct i2c_client *client)
 {
-	struct synaptics_ts_data *ts = i2c_get_clientdata(client);
 	int i;
 	int j;
 
 	uint8_t FlashQueryBaseAddr, FlashDataBaseAddr;
 	uint8_t RMICommandBaseAddr;
-	
+
 	uint8_t BootloaderIDAddr;
 	uint8_t BlockSizeAddr;
 	uint8_t FirmwareBlockCountAddr;
@@ -1207,7 +1487,7 @@ static bool synaptics_ts_fw_upgrade(struct i2c_client *client)
 	uint8_t BlockDataStartAddr;
 
 	uint8_t current_fw_ver;
-	
+
 	uint8_t bootloader_id[2];
 
 	uint8_t temp_array[2], temp_data, flashValue, m_firmwareImgVersion;
@@ -1215,14 +1495,14 @@ static bool synaptics_ts_fw_upgrade(struct i2c_client *client)
 
 	uint16_t ts_block_size, ts_config_block_count, ts_fw_block_count;
 	uint16_t m_bootloadImgID;
-	
+
 	uint32_t ts_config_img_size;
 	uint32_t ts_fw_img_size;
 	uint32_t pinValue, m_fileSize, m_firmwareImgSize, m_configImgSize, m_FirmwareImgFile_checkSum;
 
 	////////////////////////////
 
-	pr_debug("[Touch Driver] Synaptics_UpgradeFirmware [START]\n");
+	printk("[Touch Driver] synaptics_upgrade firmware [START]\n");
 /*
 	if(!(synaptics_ts_check_fwver(client) < SynapticsFirmware[0x1F]))
 	{
@@ -1231,30 +1511,38 @@ static bool synaptics_ts_fw_upgrade(struct i2c_client *client)
 		return true;
 	}
 */
-	if (ts->product_value==1)
+	if (p_ts->product_value==1)
 	{
 		memcpy(SynapticsFirmware, SynapticsFirmware_misung, sizeof(SynapticsFirmware_misung));
 		current_fw_ver = synaptics_ts_check_fwver(client);
 		if((current_fw_ver >= 0x64 && SynapticsFirmware[0x1F] >= 0x64) || (current_fw_ver < 0x64 && SynapticsFirmware[0x1F] < 0x64))
 		{
+#if 0
 			if(!(current_fw_ver < SynapticsFirmware[0x1F]))
+#else
+			if(!(current_fw_ver != SynapticsFirmware[0x1F]))
+#endif
 			{
 				// Firmware Upgrade does not necessary!!!!
-				pr_debug("[Touch Driver] Synaptics_UpgradeFirmware does not necessary!!!!\n");
+				printk("[Touch Driver] synaptics_upgrade firmware does not necessary!!!!\n");
 				return true;
 			}
 		}
 	}
-	else if (ts->product_value==2)
+	else if (p_ts->product_value==2)
 	{
 			memcpy(SynapticsFirmware, SynapticsFirmware_lgit, sizeof(SynapticsFirmware_lgit));
 			current_fw_ver = synaptics_ts_check_fwver(client);
 			if((current_fw_ver >= 0x01 && SynapticsFirmware[0x1F] >= 0x01) || (current_fw_ver < 0x01 && SynapticsFirmware[0x1F] < 0x01))
 			{
+#if 0
 				if(!(current_fw_ver < SynapticsFirmware[0x1F]))
+#else
+				if(!(current_fw_ver != SynapticsFirmware[0x1F]))
+#endif
 				{
 					// Firmware Upgrade does not necessary!!!!
-					pr_debug("[Touch Driver] Synaptics_UpgradeFirmware does not necessary!!!!\n");
+					printk("[Touch Driver] synaptics_upgrade firmware does not necessary!!!!\n");
 					return true;
 				}
 			}
@@ -1263,15 +1551,15 @@ static bool synaptics_ts_fw_upgrade(struct i2c_client *client)
 		return true;
 
 	// Address Configuration
-	FlashQueryBaseAddr = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_FLASH_QUERY_BASE_REG);
+	FlashQueryBaseAddr = i2c_smbus_read_byte_data(client, SYNAPTICS_FLASH_QUERY_BASE_REG);
 
 	BootloaderIDAddr = FlashQueryBaseAddr;
 	BlockSizeAddr = FlashQueryBaseAddr + 3;
 	FirmwareBlockCountAddr = FlashQueryBaseAddr + 5;
 	ConfigBlockCountAddr = FlashQueryBaseAddr + 7;
-	
 
-	FlashDataBaseAddr = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_FLASH_DATA_BASE_REG);
+
+	FlashDataBaseAddr = i2c_smbus_read_byte_data(client, SYNAPTICS_FLASH_DATA_BASE_REG);
 
 	BlockNumAddr = FlashDataBaseAddr;
 	BlockDataStartAddr = FlashDataBaseAddr + 2;
@@ -1281,62 +1569,62 @@ static bool synaptics_ts_fw_upgrade(struct i2c_client *client)
 
 	checkSumCode         = ExtractLongFromHeader(&(SynapticsFirmware[0]));
 	m_bootloadImgID      = (unsigned int)SynapticsFirmware[4] + (unsigned int)SynapticsFirmware[5]*0x100;
-	m_firmwareImgVersion = SynapticsFirmware[7]; 
+	m_firmwareImgVersion = SynapticsFirmware[7];
 	m_firmwareImgSize    = ExtractLongFromHeader(&(SynapticsFirmware[8]));
-	m_configImgSize      = ExtractLongFromHeader(&(SynapticsFirmware[12]));    
+	m_configImgSize      = ExtractLongFromHeader(&(SynapticsFirmware[12]));
 
 	CalculateChecksum((uint16_t*)&(SynapticsFirmware[4]), (uint16_t)(m_fileSize-4)>>1, &m_FirmwareImgFile_checkSum);
 
 	// Get Current Firmware Information
-	synaptics_ts_i2c_read_block_data(client, BlockSizeAddr, sizeof(temp_array), (u8 *)&temp_array[0]);
+	i2c_smbus_read_i2c_block_data(client, BlockSizeAddr, sizeof(temp_array), (u8 *)&temp_array[0]);
 	ts_block_size = temp_array[0] + (temp_array[1] << 8);
-	
-	synaptics_ts_i2c_read_block_data(client, FirmwareBlockCountAddr, sizeof(temp_array), (u8 *)&temp_array[0]);
+
+	i2c_smbus_read_i2c_block_data(client, FirmwareBlockCountAddr, sizeof(temp_array), (u8 *)&temp_array[0]);
 	ts_fw_block_count = temp_array[0] + (temp_array[1] << 8);
 	ts_fw_img_size = ts_block_size * ts_fw_block_count;
-	
-	synaptics_ts_i2c_read_block_data(client, ConfigBlockCountAddr, sizeof(temp_array), (u8 *)&temp_array[0]);
+
+	i2c_smbus_read_i2c_block_data(client, ConfigBlockCountAddr, sizeof(temp_array), (u8 *)&temp_array[0]);
 	ts_config_block_count = temp_array[0] + (temp_array[1] << 8);
 	ts_config_img_size = ts_block_size * ts_config_block_count;
 
-	synaptics_ts_i2c_read_block_data(client, BootloaderIDAddr, sizeof(bootloader_id), (u8 *)&bootloader_id[0]);
-	pr_debug("[TOUCH] Synaptics_UpgradeFirmware :: BootloaderID %02x %02x\n", bootloader_id[0], bootloader_id[1]);
+	i2c_smbus_read_i2c_block_data(client, BootloaderIDAddr, sizeof(bootloader_id), (u8 *)&bootloader_id[0]);
+	printk("[touch] synaptics_upgrade firmware :: bootloaderID %02x %02x\n", bootloader_id[0], bootloader_id[1]);
 
 	// Compare
 	if (m_fileSize != (0x100+m_firmwareImgSize+m_configImgSize))
 	{
-		pr_debug("[TOUCH] Synaptics_UpgradeFirmware :: Error : Invalid FileSize\n");
+		printk("[touch] synaptics_upgrade firmware :: error : invalid file size\n");
 		return true;
 	}
 
 	if (m_firmwareImgSize != ts_fw_img_size)
 	{
-		pr_debug("[TOUCH] Synaptics_UpgradeFirmware :: Error : Invalid Firmware Image Size\n");
+		pr_debug("[touch] synaptics_upgrade firmware :: error : invalid firmware image size\n");
 		return true;
 	}
 
 	if (m_configImgSize != ts_config_img_size)
 	{
-		pr_debug("[TOUCH] Synaptics_UpgradeFirmware :: Error : Invalid Config Image Size\n");
+		printk("[touch] synaptics_upgrade firmware :: error : invalid config image size\n");
 		return true;
 	}
 
 	// Flash Write Ready - Flash Command Enable & Erase
-	//synaptics_ts_i2c_write_block_data(client, BlockDataStartAddr, sizeof(bootloader_id), &bootloader_id[0]);
-	// How can i use 'synaptics_ts_i2c_write_block_data'
+	//i2c_smbus_write_block_data(client, BlockDataStartAddr, sizeof(bootloader_id), &bootloader_id[0]);
+	// How can i use 'i2c_smbus_write_block_data'
 	for(i = 0; i < sizeof(bootloader_id); i++)
 	{
-		if(synaptics_ts_i2c_write_byte_data(client, BlockDataStartAddr+i, bootloader_id[i]))
-			pr_debug("[TOUCH] Synaptics_UpgradeFirmware :: Address %02x, Value %02x\n", BlockDataStartAddr+i, bootloader_id[i]);
+		if(i2c_smbus_write_byte_data(client, BlockDataStartAddr+i, bootloader_id[i]))
+			printk("[touch] synaptics_upgrade firmware :: address %02x, value %02x\n", BlockDataStartAddr+i, bootloader_id[i]);
 	}
 
 	do
 	{
-		flashValue = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
-		temp_data = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
+		flashValue = i2c_smbus_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
+		temp_data = i2c_smbus_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
 	} while((flashValue & 0x0f) != 0x00);
 
-	synaptics_ts_i2c_write_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG, SYNAPTICS_FLASH_CMD_ENABLE);
+	i2c_smbus_write_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG, SYNAPTICS_FLASH_CMD_ENABLE);
 
 	do
 	{
@@ -1345,30 +1633,30 @@ static bool synaptics_ts_fw_upgrade(struct i2c_client *client)
 	} while(pinValue);
 	do
 	{
-		flashValue = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
-		temp_data = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
+		flashValue = i2c_smbus_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
+		temp_data = i2c_smbus_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
 	} while(flashValue != 0x80);
-	flashValue = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
+	flashValue = i2c_smbus_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
 
-	pr_debug("[TOUCH] Synaptics_UpgradeFirmware :: Flash Program Enable Setup Complete\n");
+	printk("[touch] synaptics_upgrade firmware :: flash program enable setup complete\n");
 
-	//synaptics_ts_i2c_write_block_data(client, BlockDataStartAddr, sizeof(bootloader_id), &bootloader_id[0]);
-	// How can i use 'synaptics_ts_i2c_write_block_data'
+	//i2c_smbus_write_block_data(client, BlockDataStartAddr, sizeof(bootloader_id), &bootloader_id[0]);
+	// How can i use 'i2c_smbus_write_block_data'
 	for(i = 0; i < sizeof(bootloader_id); i++)
 	{
-		if(synaptics_ts_i2c_write_byte_data(client, BlockDataStartAddr+i, bootloader_id[i]))
-			pr_debug("[TOUCH] Synaptics_UpgradeFirmware :: Address %02x, Value %02x\n", BlockDataStartAddr+i, bootloader_id[i]);
+		if(i2c_smbus_write_byte_data(client, BlockDataStartAddr+i, bootloader_id[i]))
+			printk("[touch] synaptics_upgrade firmware :: address %02x, value %02x\n", BlockDataStartAddr+i, bootloader_id[i]);
 	}
 
 	if(m_firmwareImgVersion == 0 && ((unsigned int)bootloader_id[0] + (unsigned int)bootloader_id[1]*0x100) != m_bootloadImgID)
 	{
-		pr_debug("[TOUCH] Synaptics_UpgradeFirmware :: Error : Invalid Bootload Image\n");
+		printk("[touch] synaptics_upgrade firmware :: error : invalid bootload Image\n");
 		return true;
 	}
 
-	synaptics_ts_i2c_write_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG, SYNAPTICS_FLASH_CMD_ERASEALL);
+	i2c_smbus_write_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG, SYNAPTICS_FLASH_CMD_ERASEALL);
 
-	pr_debug("[TOUCH] Synaptics_UpgradeFirmware :: SYNAPTICS_FLASH_CMD_ERASEALL\n");
+	printk("[touch] synaptics_upgrade firmware :: SYNAPTICS_FLASH_CMD_ERASEALL\n");
 
 	do
 	{
@@ -1377,11 +1665,11 @@ static bool synaptics_ts_fw_upgrade(struct i2c_client *client)
 	} while(pinValue);
 	do
 	{
-		flashValue = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
-		temp_data = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
+		flashValue = i2c_smbus_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
+		temp_data = i2c_smbus_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
 	} while(flashValue != 0x80);
-	
-	pr_debug("[TOUCH] Synaptics_UpgradeFirmware :: Flash Erase Complete\n");
+
+	printk("[touch] synaptics_upgrade firmware :: flash erase complete\n");
 
 	// Flash Firmware Data Write
 	for(i = 0; i < ts_fw_block_count; ++i)
@@ -1390,23 +1678,23 @@ static bool synaptics_ts_fw_upgrade(struct i2c_client *client)
 		temp_array[1] = (i & 0xff00) >> 8;
 
 		// Write Block Number
-		//synaptics_ts_i2c_write_block_data(client, BlockNumAddr, sizeof(temp_array), &temp_array[0]);
-		// How can i use 'synaptics_ts_i2c_write_block_data'
+		//i2c_smbus_write_block_data(client, BlockNumAddr, sizeof(temp_array), &temp_array[0]);
+		// How can i use 'i2c_smbus_write_block_data'
 		for(j = 0; j < sizeof(temp_array); j++)
 		{
-			synaptics_ts_i2c_write_byte_data(client, BlockNumAddr+j, temp_array[j]);
+			i2c_smbus_write_byte_data(client, BlockNumAddr+j, temp_array[j]);
 		}
 
 		// Write Data Block&SynapticsFirmware[0]
-		//synaptics_ts_i2c_write_block_data(client, BlockDataStartAddr, ts_block_size, &SynapticsFirmware[0x100+i*ts_block_size]);
-		// How can i use 'synaptics_ts_i2c_write_block_data'
+		//i2c_smbus_write_block_data(client, BlockDataStartAddr, ts_block_size, &SynapticsFirmware[0x100+i*ts_block_size]);
+		// How can i use 'i2c_smbus_write_block_data'
 		for(j = 0; j < ts_block_size; j++)
 		{
-			synaptics_ts_i2c_write_byte_data(client, BlockDataStartAddr+j, SynapticsFirmware[0x100+i*ts_block_size+j]);
+			i2c_smbus_write_byte_data(client, BlockDataStartAddr+j, SynapticsFirmware[0x100+i*ts_block_size+j]);
 		}
 
 		// Issue Write Firmware Block command
-		synaptics_ts_i2c_write_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG, SYNAPTICS_FLASH_CMD_FW_WRITE);
+		i2c_smbus_write_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG, SYNAPTICS_FLASH_CMD_FW_WRITE);
 		do
 		{
 			pinValue = gpio_get_value(TOUCH_INT_N_GPIO);
@@ -1414,12 +1702,12 @@ static bool synaptics_ts_fw_upgrade(struct i2c_client *client)
 		} while(pinValue);
 		do
 		{
-			flashValue = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
-			temp_data = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
+			flashValue = i2c_smbus_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
+			temp_data = i2c_smbus_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
 		} while(flashValue != 0x80);
 	} //for
-	
-	pr_debug("[TOUCH] Synaptics_UpgradeFirmware :: Flash Firmware Write Complete\n");
+
+	printk("[touch] synaptics_upgrade firmware :: flash firmware write complete\n");
 
 	// Flash Firmware Config Write
 	for(i = 0; i < ts_config_block_count; i++)
@@ -1427,23 +1715,23 @@ static bool synaptics_ts_fw_upgrade(struct i2c_client *client)
 		SpecialCopyEndianAgnostic(&temp_array[0], i);
 
 		// Write Configuration Block Number
-		synaptics_ts_i2c_write_block_data(client, BlockNumAddr, sizeof(temp_array), &temp_array[0]);
-		// How can i use 'synaptics_ts_i2c_write_block_data'
+		i2c_smbus_write_block_data(client, BlockNumAddr, sizeof(temp_array), &temp_array[0]);
+		// How can i use 'i2c_smbus_write_block_data'
 		for(j = 0; j < sizeof(temp_array); j++)
 		{
-			synaptics_ts_i2c_write_byte_data(client, BlockNumAddr+j, temp_array[j]);
+			i2c_smbus_write_byte_data(client, BlockNumAddr+j, temp_array[j]);
 		}
 
 		// Write Data Block
-		//synaptics_ts_i2c_write_block_data(client, BlockDataStartAddr, ts_block_size, &SynapticsFirmware[0x100+m_firmwareImgSize+i*ts_block_size]);
-		// How can i use 'synaptics_ts_i2c_write_block_data'
+		//i2c_smbus_write_block_data(client, BlockDataStartAddr, ts_block_size, &SynapticsFirmware[0x100+m_firmwareImgSize+i*ts_block_size]);
+		// How can i use 'i2c_smbus_write_block_data'
 		for(j = 0; j < ts_block_size; j++)
 		{
-			synaptics_ts_i2c_write_byte_data(client, BlockDataStartAddr+j, SynapticsFirmware[0x100+m_firmwareImgSize+i*ts_block_size+j]);
+			i2c_smbus_write_byte_data(client, BlockDataStartAddr+j, SynapticsFirmware[0x100+m_firmwareImgSize+i*ts_block_size+j]);
 		}
 
 		// Issue Write Configuration Block command to flash command register
-		synaptics_ts_i2c_write_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG, SYNAPTICS_FLASH_CMD_CONFIG_WRITE);
+		i2c_smbus_write_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG, SYNAPTICS_FLASH_CMD_CONFIG_WRITE);
 		do
 		{
 			pinValue = gpio_get_value(TOUCH_INT_N_GPIO);
@@ -1451,16 +1739,16 @@ static bool synaptics_ts_fw_upgrade(struct i2c_client *client)
 		} while(pinValue);
 		do
 		{
-			flashValue = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
-			temp_data = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
+			flashValue = i2c_smbus_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
+			temp_data = i2c_smbus_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
 		} while(flashValue != 0x80);
 	}
-	
-	pr_debug("[TOUCH] Synaptics_UpgradeFirmware :: Flash Config Write Complete\n");
+
+	printk("[touch] synaptics_upgrade firmware :: flash config write complete\n");
 
 
-	RMICommandBaseAddr = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_RMI_CMD_BASE_REG);
-	synaptics_ts_i2c_write_byte_data(client, RMICommandBaseAddr, 0x01);
+	RMICommandBaseAddr = i2c_smbus_read_byte_data(client, SYNAPTICS_RMI_CMD_BASE_REG);
+	i2c_smbus_write_byte_data(client, RMICommandBaseAddr, 0x01);
 	mdelay(100);
 
 	do
@@ -1470,38 +1758,66 @@ static bool synaptics_ts_fw_upgrade(struct i2c_client *client)
 	} while(pinValue);
 	do
 	{
-		flashValue = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
-		temp_data = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
+		flashValue = i2c_smbus_read_byte_data(client, SYNAPTICS_FLASH_CONTROL_REG);
+		temp_data = i2c_smbus_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
 	} while((flashValue & 0x0f) != 0x00);
 
 	// Clear the attention assertion by reading the interrupt status register
-	temp_data = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
+	temp_data = i2c_smbus_read_byte_data(client, SYNAPTICS_INT_STATUS_REG);
 
 	// Read F01 Status flash prog, ensure the 6th bit is '0'
 	do
 	{
-		temp_data = synaptics_ts_i2c_read_byte_data(client, SYNAPTICS_DATA_BASE_REG);
+		temp_data = i2c_smbus_read_byte_data(client, SYNAPTICS_DATA_BASE_REG);
 	} while((temp_data & 0x40) != 0);
 
 	return true;
 }
 #endif
 
-#ifdef FEATURE_LGE_TOUCH_ESD_DETECT 
-static bool  Synatics_ts_touch_Recovery()
+#ifdef FEATURE_LGE_TOUCH_ESD_DETECT
+static bool  synatics_ts_touch_recovery()
 {
+	disable_irq(p_ts->client->irq);
+	printk("[SHYUN] [%s] - [%d] [irq_depth = %d]\n", __func__, __LINE__, synaptics_irq_depth_count());
 	//touch power down reset for ESD recovery
-	aat2870_touch_ldo_enable(aat2870_i2c_client, 0);
-	mdelay(50);
-
+	mdelay(30);
+//	aat2870_ldo_write(0x25 , 0x00);	//SHYUN_TBD
+	mdelay(100);
 	//touch power on reset for ESD recovery
-	aat2870_touch_ldo_enable(aat2870_i2c_client, 1);
-	mdelay(50);
+//	aat2870_ldo_write(0x25 , 0x4C);	//SHYUN_TBD
+	mdelay(70);
+	
+#ifdef FEATURE_LGE_TOUCH_GHOST_FINGER_IMPROVE
+	melt_mode = 0;
+	ghost_finger_1 = 0;
+	ghost_finger_2 = 0;
+	pressed = 0;
+	ghost_count=0;
+	melt_flag=0;
+#endif
+	enable_irq(p_ts->client->irq);
 	
 	return true;
 }
 #endif /*FEATURE_LGE_TOUCH_ESD_DETECT*/
 
+static void synatics_ts_power_on(void)
+{
+	printk("%s : %d\n",__func__,__LINE__);
+	//aat2870_ldo_write(0x25 , 0x00);
+	mdelay(30);
+	//aat2870_ldo_write(0x25 , 0x4C);
+	return;
+}
+
+static void synatics_ts_power_off(void)
+{
+	printk("%s : %d\n",__func__,__LINE__);
+	//aat2870_ldo_write(0x25 , 0x00);
+	mdelay(50);
+	return;
+}
 
 /*************************************************************************************************
  * 1. Set interrupt configuration
@@ -1513,10 +1829,8 @@ static bool  Synatics_ts_touch_Recovery()
  * 7. Set some register
  * 8. Enable interrupt
 *************************************************************************************************/
-static int synaptics_ts_probe(
-	struct i2c_client *client, const struct i2c_device_id *id)
+static int synaptics_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
-	struct synaptics_ts_data *ts;
 	int ret = 0;
 	uint16_t max_x;
 	uint16_t max_y;
@@ -1526,8 +1840,17 @@ static int synaptics_ts_probe(
 	char product_id[6];
 	uint8_t product_id_addr;
 
-	if (lcd_off_boot) return -ENODEV;
-	pr_warning("%s() -- start\n\n\n", __func__);
+	printk("[SHYUN] [%s] - [%d] [init_input ver.]\n", __func__, __LINE__);
+	printk("[SHYUN] [%s] - [%d] [touch sysfs added ver.]\n", __func__, __LINE__);
+
+	if(lcd_off_boot ==1) 	
+	{
+		printk("[touch] No Device LCD\n");
+		ret = -ENODEV;
+		return ret;
+	}
+
+	printk("%s() -- start\n\n\n", __func__);
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		pr_err("synaptics_ts_probe: need I2C_FUNC_I2C\n");
@@ -1535,23 +1858,23 @@ static int synaptics_ts_probe(
 		goto err_check_functionality_failed;
 	}
 
-	ts = kzalloc(sizeof(*ts), GFP_KERNEL);
-	if (ts == NULL) {
+	p_ts = kzalloc(sizeof(*p_ts), GFP_KERNEL);
+	if (p_ts == NULL) {
 		ret = -ENOMEM;
 		goto err_alloc_data_failed;
 	}
 
-	ts->client = client;
+	p_ts->client = client;
 	hub_ts_client = client;
-	i2c_set_clientdata(client, ts);
+	i2c_set_clientdata(client, p_ts);
 
-	INIT_WORK(&ts->work, synaptics_ts_work_func);
-	INIT_DELAYED_WORK(&ts->init_delayed_work, synaptics_ts_init_delayed_work);
+	INIT_WORK(&p_ts->work, synaptics_ts_work_func);
+//	INIT_DELAYED_WORK(&p_ts->init_delayed_work, synaptics_ts_init_delayed_work);
+	INIT_DELAYED_WORK(&p_ts->init_delayed_work, synaptics_ts_initialize);
 
-#ifdef FEATURE_LGE_TOUCH_ESD_DETECT 
+#ifdef FEATURE_LGE_TOUCH_ESD_DETECT
 	wake_lock_init(&ts_wake_lock, WAKE_LOCK_SUSPEND, "ts_upgrade");
-#endif /*FEATURE_LGE_TOUCH_ESD_DETECT*/	
-
+#endif /*FEATURE_LGE_TOUCH_ESD_DETECT*/
 
 #ifdef FEATURE_LGE_TOUCH_GRIP_SUPPRESSION
 	ret = device_create_file(&client->dev, &dev_attr_gripsuppression);
@@ -1561,132 +1884,122 @@ static int synaptics_ts_probe(
 	}
 #endif /* FEATURE_LGE_TOUCH_GRIP_SUPPRESSION */
 
-
   	memset(&ts_reg_data, 0x0, sizeof(ts_sensor_data));
 	memset(&prev_ts_data, 0x0, sizeof(ts_finger_data));
   	memset(&curr_ts_data, 0x0, sizeof(ts_finger_data));
 
-	/*************************************************************************************************
-	 * 3. Power up
-	 *************************************************************************************************/
-	/* It's controlled by LCD BL CHARGER PUMP */
-
-
-	/*************************************************************************************************
-	 * 4. Read RMI Version
-	 * To distinguish T1021 and T1007. Select RMI Version
-	 * TODO: Power를 이전에 하는 것으로 변경하면 위치 변경해야 한다.
-	 *************************************************************************************************/
-
-	// device check
-	product_id_addr = (synaptics_ts_i2c_read_byte_data(hub_ts_client, SYNAPTICS_RMI_QUERY_BASE_REG)) + 11;
-	synaptics_ts_i2c_read_block_data(hub_ts_client, product_id_addr, sizeof(product_id), (u8 *)&product_id[0]);
-
-	if(strncmp(product_id, SYNAPTICS_TM1576_PRODUCT_ID, 6) == 0)
-	{
-		pr_err("synaptics_ts_probe: product ID : TM1576\n");
-		SYNAPTICS_PANEL_MAX_X = SYNAPTICS_TM1576_RESOLUTION_X;
-		SYNAPTICS_PANEL_MAX_Y = SYNAPTICS_TM1576_RESOLUTION_Y;
-		SYNAPTICS_PANEL_LCD_MAX_Y = SYNAPTICS_TM1576_LCD_ACTIVE_AREA;
-		SYNAPTICS_PANEL_BUTTON_MIN_Y = SYNAPTICS_TM1576_BUTTON_ACTIVE_AREA;
-		ts->product_value=3; //other
+	// touch firmware ID check
+	product_id_addr = (i2c_smbus_read_byte_data(hub_ts_client, SYNAPTICS_RMI_QUERY_BASE_REG)) + 11;
+	
+	ret=i2c_smbus_read_i2c_block_data(hub_ts_client, product_id_addr, sizeof(product_id), (u8 *)&product_id[0]);
+	
+	if (ret<0) {
+		pr_err("synaptics_ts_probe: need I2C_DEV\n");
+		ret = -ENODEV;
+		goto err_check_functionality_failed;
 	}
-	else if(strncmp(product_id, SYNAPTICS_TM1702_PRODUCT_ID, 6) == 0)
-	{
-		pr_err("synaptics_ts_probe: product ID : TM1702\n");
-		SYNAPTICS_PANEL_MAX_X = SYNAPTICS_TM1702_RESOLUTION_X;
-		SYNAPTICS_PANEL_MAX_Y = SYNAPTICS_TM1702_RESOLUTION_Y;
-		SYNAPTICS_PANEL_LCD_MAX_Y = SYNAPTICS_TM1702_LCD_ACTIVE_AREA;
-		SYNAPTICS_PANEL_BUTTON_MIN_Y = SYNAPTICS_TM1702_BUTTON_ACTIVE_AREA;
-		ts->product_value=1; //misung panel
+	
+		if(strncmp(product_id, SYNAPTICS_TM1576_PRODUCT_ID, 6) == 0)
+		{
+			pr_err("synaptics_ts_probe: product ID : TM1576\n");
+			SYNAPTICS_PANEL_MAX_X = SYNAPTICS_TM1576_RESOLUTION_X;
+			SYNAPTICS_PANEL_MAX_Y = SYNAPTICS_TM1576_RESOLUTION_Y;
+			SYNAPTICS_PANEL_LCD_MAX_Y = SYNAPTICS_TM1576_LCD_ACTIVE_AREA;
+			SYNAPTICS_PANEL_BUTTON_MIN_Y = SYNAPTICS_TM1576_BUTTON_ACTIVE_AREA;
+			p_ts->product_value=3; //other
+		}
+		else if(strncmp(product_id, SYNAPTICS_TM1702_PRODUCT_ID, 6) == 0)
+		{
+			pr_err("synaptics_ts_probe: product ID : TM1702\n");
+			SYNAPTICS_PANEL_MAX_X = SYNAPTICS_TM1702_RESOLUTION_X;
+			SYNAPTICS_PANEL_MAX_Y = SYNAPTICS_TM1702_RESOLUTION_Y;
+			SYNAPTICS_PANEL_LCD_MAX_Y = SYNAPTICS_TM1702_LCD_ACTIVE_AREA;
+			SYNAPTICS_PANEL_BUTTON_MIN_Y = SYNAPTICS_TM1702_BUTTON_ACTIVE_AREA;
+			p_ts->product_value=1; //misung panel
 
-		synaptics_ts_fw_upgrade(hub_ts_client);
-	}
-	else if(strncmp(product_id, SYNAPTICS_TM1738_PRODUCT_ID, 6) == 0)
-	{
-		pr_err("synaptics_ts_probe: product ID : TM1738\n");
-		SYNAPTICS_PANEL_MAX_X = SYNAPTICS_TM1738_RESOLUTION_X;
-		SYNAPTICS_PANEL_MAX_Y = SYNAPTICS_TM1738_RESOLUTION_Y;
-		SYNAPTICS_PANEL_LCD_MAX_Y = SYNAPTICS_TM1738_LCD_ACTIVE_AREA;
-		SYNAPTICS_PANEL_BUTTON_MIN_Y = SYNAPTICS_TM1738_BUTTON_ACTIVE_AREA;
-		ts->product_value=2; //lgit panel
+			synaptics_ts_fw_upgrade(hub_ts_client);
+		}
+		else if(strncmp(product_id, SYNAPTICS_TM1738_PRODUCT_ID, 6) == 0)
+		{
+			pr_err("synaptics_ts_probe: product ID : TM1738\n");
+			SYNAPTICS_PANEL_MAX_X = SYNAPTICS_TM1738_RESOLUTION_X;
+			SYNAPTICS_PANEL_MAX_Y = SYNAPTICS_TM1738_RESOLUTION_Y;
+			SYNAPTICS_PANEL_LCD_MAX_Y = SYNAPTICS_TM1738_LCD_ACTIVE_AREA;
+			SYNAPTICS_PANEL_BUTTON_MIN_Y = SYNAPTICS_TM1738_BUTTON_ACTIVE_AREA;
+			p_ts->product_value=2; //lgit panel
 
-		synaptics_ts_fw_upgrade(hub_ts_client);
-	}
-	else
-	{
-		pr_err("synaptics_ts_probe: product ID : error\n");
-		SYNAPTICS_PANEL_MAX_X = SYNAPTICS_TM1702_RESOLUTION_X;
-		SYNAPTICS_PANEL_MAX_Y = SYNAPTICS_TM1702_RESOLUTION_Y;
-		SYNAPTICS_PANEL_LCD_MAX_Y = SYNAPTICS_TM1702_LCD_ACTIVE_AREA;
-		SYNAPTICS_PANEL_BUTTON_MIN_Y = SYNAPTICS_TM1702_BUTTON_ACTIVE_AREA;
-		ts->product_value=0; //nothing
-	}
+			if(ret>=0) synaptics_ts_fw_upgrade(hub_ts_client);
+		}
+		else
+		{
+			pr_err("synaptics_ts_probe: product ID : error\n");
+			SYNAPTICS_PANEL_MAX_X = SYNAPTICS_TM1738_RESOLUTION_X;
+			SYNAPTICS_PANEL_MAX_Y = SYNAPTICS_TM1738_RESOLUTION_Y;
+			SYNAPTICS_PANEL_LCD_MAX_Y = SYNAPTICS_TM1738_LCD_ACTIVE_AREA;
+			SYNAPTICS_PANEL_BUTTON_MIN_Y = SYNAPTICS_TM1738_BUTTON_ACTIVE_AREA;
+			p_ts->product_value=2; //nothing
+		}
 
-	touch_fw_version=synaptics_ts_check_fwver(hub_ts_client);
+		if(ret>=0) touch_fw_version=synaptics_ts_check_fwver(hub_ts_client);
 
-	ts->input_dev = input_allocate_device();
-	if (ts->input_dev == NULL) {
+
+	p_ts->input_dev = input_allocate_device();
+	if (p_ts->input_dev == NULL) {
 		ret = -ENOMEM;
 		pr_err("synaptics_ts_probe: Failed to allocate input device\n");
 		goto err_input_dev_alloc_failed;
 	}
-	ts->input_dev->name = "hub_synaptics_touch";
+	p_ts->input_dev->name = "hub_synaptics_touch";
 
-	set_bit(EV_SYN, ts->input_dev->evbit);
-	set_bit(EV_KEY, ts->input_dev->evbit);
-	set_bit(BTN_TOUCH, ts->input_dev->keybit);
-	set_bit(EV_ABS, ts->input_dev->evbit);
+	set_bit(EV_SYN, p_ts->input_dev->evbit);
+	set_bit(EV_KEY, p_ts->input_dev->evbit);
+	set_bit(BTN_TOUCH, p_ts->input_dev->keybit);
+	set_bit(EV_ABS, p_ts->input_dev->evbit);
 
 	// button
-	set_bit(KEY_MENU, ts->input_dev->keybit);
-	set_bit(KEY_HOME, ts->input_dev->keybit);
-	set_bit(KEY_BACK, ts->input_dev->keybit);
-	set_bit(KEY_SEARCH, ts->input_dev->keybit);
-	set_bit(KEY_REJECT, ts->input_dev->keybit);
+	set_bit(KEY_MENU, p_ts->input_dev->keybit);
+	set_bit(KEY_HOME, p_ts->input_dev->keybit);
+	set_bit(KEY_BACK, p_ts->input_dev->keybit);
+	set_bit(KEY_SEARCH, p_ts->input_dev->keybit);
+	set_bit(KEY_REJECT, p_ts->input_dev->keybit);
 
-	max_x = SYNAPTICS_PANEL_MAX_X+1;
+	max_x = SYNAPTICS_PANEL_MAX_X;
 	max_y = SYNAPTICS_PANEL_LCD_MAX_Y;
 	max_pressure = 0xFF;
 	max_width = 0x0F;
- 
-	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, -1, max_x, 0, 0);
-	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0, max_y, 0, 0);
-	input_set_abs_params(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0, max_pressure, 0, 0);
-	input_set_abs_params(ts->input_dev, ABS_MT_WIDTH_MAJOR, 0, max_width, 0, 0);
+
+	input_set_abs_params(p_ts->input_dev, ABS_MT_POSITION_X, 0, max_x, 0, 0);
+	input_set_abs_params(p_ts->input_dev, ABS_MT_POSITION_Y, 0, max_y, 0, 0);
+	input_set_abs_params(p_ts->input_dev, ABS_MT_TOUCH_MAJOR, 0, max_pressure, 0, 0);
+	input_set_abs_params(p_ts->input_dev, ABS_MT_WIDTH_MAJOR, 0, max_width, 0, 0);
 
 	pr_info("synaptics_ts_probe: max_x %d, max_y %d\n", max_x, max_y);
 
-
-	/* ts->input_dev->name = ts->keypad_info->name; */
-	ret = input_register_device(ts->input_dev);
+	ret = input_register_device(p_ts->input_dev);
 	if (ret) {
-		pr_err("synaptics_ts_probe: Unable to register %s input device\n", ts->input_dev->name);
+		pr_err("synaptics_ts_probe: Unable to register %s input device\n", p_ts->input_dev->name);
 		goto err_input_register_device_failed;
 	}
 
 	pr_debug("########## irq [%d], irqflags[0x%x]\n", client->irq, IRQF_TRIGGER_FALLING);
-	
-	
-	synaptics_ts_i2c_write_byte_data(hub_ts_client, SYNAPTICS_RIM_CONTROL_INTERRUPT_ENABLE, 0x00); //interrupt disable
-	
-	
+
+	i2c_smbus_write_byte_data(hub_ts_client, SYNAPTICS_RIM_CONTROL_INTERRUPT_ENABLE, 0x00); //interrupt disable
+
 	if (client->irq) {
-		ret = request_irq(client->irq, synaptics_ts_irq_handler, IRQF_TRIGGER_FALLING, client->name, ts);
+		ret = request_irq(client->irq, synaptics_ts_irq_handler, IRQF_TRIGGER_FALLING, client->name, p_ts);
 
 		if (ret == 0) {
-			ts->use_irq = 1;
+			p_ts->use_irq = 1;
 			pr_warning("request_irq\n");
 			}
 		else
 			dev_err(&client->dev, "request_irq failed\n");
 	}
-	if (!ts->use_irq) {
-		hrtimer_init(&ts->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-		ts->timer.function = synaptics_ts_timer_func;
-		hrtimer_start(&ts->timer, ktime_set(1, 0), HRTIMER_MODE_REL);
+	if (!p_ts->use_irq) {
+		hrtimer_init(&p_ts->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+		p_ts->timer.function = synaptics_ts_timer_func;
+		hrtimer_start(&p_ts->timer, ktime_set(1, 0), HRTIMER_MODE_REL);
 	}
-
 
 	ret = device_create_file(&client->dev, &dev_attr_fw);
 	if (ret) {
@@ -1695,141 +2008,162 @@ static int synaptics_ts_probe(
 		return ret;
 	}
 
-
-
-	schedule_delayed_work(&ts->init_delayed_work, msecs_to_jiffies(200/*500*/));	
-
-	
-	
-//	atomic_set( &g_synaptics_ts_resume_flag, 0 );
-//	atomic_set( &g_synaptics_ts_suspend_flag, 0 );
-	
-	
-#ifdef CONFIG_HAS_EARLYSUSPEND 
-	ts->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
-	ts->early_suspend.suspend = synaptics_ts_early_suspend;
-	ts->early_suspend.resume = synaptics_ts_late_resume;
-	register_early_suspend(&ts->early_suspend);
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	p_ts->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN - 1;
+	p_ts->early_suspend.suspend = synaptics_ts_early_suspend;
+	p_ts->early_suspend.resume = synaptics_ts_late_resume;
+	register_early_suspend(&p_ts->early_suspend);
 #endif
 
-	pr_warning("synaptics_ts_probe: Start touchscreen %s in %s mode\n", ts->input_dev->name, ts->use_irq ? "interrupt" : "polling");
+	melt_mode = 0;
+	ghost_finger_1 = 0;
+	ghost_finger_2 = 0;
+	pressed = 0;
+	ghost_count=0;
+	melt_flag=0;
+
+	//synaptics_ts_initialize();
+	//schedule_delayed_work(&p_ts->init_delayed_work, msecs_to_jiffies(30000));
+	schedule_delayed_work(&p_ts->init_delayed_work, msecs_to_jiffies(15000));
+
+	printk("synaptics_ts_probe: Start touchscreen %s in %s mode\n", p_ts->input_dev->name, p_ts->use_irq ? "interrupt" : "polling");
 	return 0;
 
 err_input_register_device_failed:
-	input_free_device(ts->input_dev);
+	input_free_device(p_ts->input_dev);
 
 err_input_dev_alloc_failed:
-err_power_failed:
-	kfree(ts);
 err_alloc_data_failed:
 err_check_functionality_failed:
 	return ret;
 }
 
-
 void synaptics_ts_disable_irq()
 {
-	if (lcd_off_boot == 0) 
-	      disable_irq(hub_ts_client->irq);
+	printk("\n%s : %d\n",__func__,__LINE__);
+	
+	if(lcd_off_boot==1)	return;
+
+	disable_irq(hub_ts_client->irq);
+	disable_irq_flag = 1;
+	printk("[SHYUN] [%s] - [%d] [irq_depth = %d]\n", __func__, __LINE__, synaptics_irq_depth_count());
 }
 EXPORT_SYMBOL(synaptics_ts_disable_irq);
 
-
 static int synaptics_ts_remove(struct i2c_client *client)
 {
-	struct synaptics_ts_data *ts = i2c_get_clientdata(client);
-
-#ifdef FEATURE_LGE_TOUCH_GRIP_SUPPRESSION	
+#ifdef FEATURE_LGE_TOUCH_GRIP_SUPPRESSION
 	device_remove_file(&client->dev, &dev_attr_gripsuppression);
-#endif 
+#endif
 
-	unregister_early_suspend(&ts->early_suspend);
-	if (ts->use_irq)
-		free_irq(client->irq, ts);
+	unregister_early_suspend(&p_ts->early_suspend);
+	if (p_ts->use_irq)
+		free_irq(client->irq, p_ts);
 	else
-		hrtimer_cancel(&ts->timer);
-	input_unregister_device(ts->input_dev);
-	kfree(ts);
+		hrtimer_cancel(&p_ts->timer);
+	input_unregister_device(p_ts->input_dev);
+	kfree(p_ts);
 	return 0;
 }
 
 static int synaptics_ts_suspend(struct i2c_client *client, pm_message_t mesg)
 {
 	int ret;
-	struct synaptics_ts_data *ts = i2c_get_clientdata(client);
+
+	printk("[SHYUN] [%s] - [%d] [Cancel delayed work]\n", __func__, __LINE__);
 
 	init_stabled = 0;
-	
-	if (ts->use_irq)
+
+	if (p_ts->use_irq)
 		disable_irq(client->irq);
 	else
-		hrtimer_cancel(&ts->timer);
-	
-	ret = cancel_work_sync(&ts->init_delayed_work); 
-	ret = cancel_work_sync(&ts->work);
-	if (ret && ts->use_irq) /* if work was pending disable-count is now 2 */
-		enable_irq(client->irq);
+		hrtimer_cancel(&p_ts->timer);
 
-#if 0 
-	    ret = synaptics_ts_i2c_write_byte_data(ts->client, SYNAPTICS_CONTROL_REG, SYNAPTICS_CONTROL_SLEEP); /* sleep */
-	    if (ret < 0)
-		pr_err("synaptics_ts_suspend: synaptics_ts_i2c_write_byte_data failed\n");
-#endif //end of seven		
+	ret = cancel_work_sync(&p_ts->work);
+	cancel_delayed_work_sync(&p_ts->init_delayed_work);
+
+	//if (ret && p_ts->use_irq) /* if work was pending disable-count is now 2 */
+	//	enable_irq(client->irq);
 
 #ifdef FEATURE_LGE_TOUCH_GHOST_FINGER_IMPROVE
-	    melt_mode = 0;
-	    ghost_finger_1 = 0;
-	    ghost_finger_2 = 0;
-	    pressed = 0;    
-	    ghost_count=0; 
+	melt_mode = 0;
+	ghost_finger_1 = 0;
+	ghost_finger_2 = 0;
+	pressed = 0;
+	ghost_count=0;
+	melt_flag=0;
+	ts_esd_detect_flag=0;
+	ts_esd_reset=0;
 #endif
-		
+	//synatics_ts_power_off();
+
 	return 0;
 }
 
-
 static int synaptics_ts_resume(struct i2c_client *client)
 {
-	int ret;
-	struct synaptics_ts_data *ts = i2c_get_clientdata(client);
-	
-	init_stabled = 1;
+	u16 old_mux = 0x0, new_mux = 0x0;
+	u8 touch_ldo_status, touch_ldo_en_status;
 
-   	if (ts->use_irq)
+	printk("[SHYUN] [%s] - [%d] [Delay 400ms]\n", __func__, __LINE__);
+
+	touch_ldo_en_status = touch_get_ldo_en_status();
+
+	touch_ldo_status = touch_get_ldo_status();
+
+	if (p_ts->use_irq)
 		enable_irq(client->irq);
 
-	if (!ts->use_irq)
-		hrtimer_start(&ts->timer, ktime_set(1, 0), HRTIMER_MODE_REL);
-
-
-	schedule_delayed_work(&ts->init_delayed_work, msecs_to_jiffies(400));
+	if (!p_ts->use_irq)
+		hrtimer_start(&p_ts->timer, ktime_set(1, 0), HRTIMER_MODE_REL);
 
 	memset(&ts_reg_data, 0x0, sizeof(ts_sensor_data));
 	memset(&prev_ts_data, 0x0, sizeof(ts_finger_data));
-	memset(&curr_ts_data, 0x0, sizeof(ts_finger_data));	
-	
+  	memset(&curr_ts_data, 0x0, sizeof(ts_finger_data));
+
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2012.08.21] - Check the mux_mode
+	old_mux = touch_get_mux();
+
+	printk("[%s-%d] [ en = 0x%x / ldo = 0x%x / mux = 0x%x ] \n",__func__,__LINE__, touch_ldo_en_status, touch_ldo_status, old_mux);
+
+	if(old_mux != (OMAP_PIN_INPUT | OMAP_WAKEUP_EN | OMAP_OFFOUT_EN | OMAP_MUX_MODE4)) {
+
+		printk("[SHYUN] [%s-%d] mux_mode is modified! [ old_mux = 0x%x ]\n",__func__, __LINE__, old_mux);
+
+		touch_set_mux_input();
+
+		new_mux = touch_get_mux();
+
+		printk("[SHYUN] [%s-%d] New mux mode setting! [ old_mux = 0x%x / new_mux = 0x%x ]\n",__func__, __LINE__, old_mux, new_mux);
+	}
+
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2012.09.01] - Fix the touch lockup
+#if 0
+	synaptics_ts_initialize();
+
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2012.08.21]- Check the mux_mode
+	schedule_delayed_work(&p_ts->init_delayed_work, msecs_to_jiffies(4000));
+#else
+	schedule_delayed_work(&p_ts->init_delayed_work, msecs_to_jiffies(400));
+#endif
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2012.09.01]- Fix the touch lockup
+
 	return 0;
 }
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 static void synaptics_ts_early_suspend(struct early_suspend *h)
 {
-	struct synaptics_ts_data *ts;
-	ts = container_of(h, struct synaptics_ts_data, early_suspend);
-	
-	synaptics_ts_suspend(ts->client, PMSG_SUSPEND);
-		
-	return 0;
+	printk("%s : %d\n",__func__,__LINE__);
+	p_ts = container_of(h, struct synaptics_ts_priv, early_suspend);
+	synaptics_ts_suspend(p_ts->client, PMSG_SUSPEND);
 }
 
 static void synaptics_ts_late_resume(struct early_suspend *h)
 {
-	struct synaptics_ts_data *ts;
-	ts = container_of(h, struct synaptics_ts_data, early_suspend);
-		
-	synaptics_ts_resume(ts->client);		
-	
-	return 0;
+	printk("%s : %d\n",__func__,__LINE__);
+	p_ts = container_of(h, struct synaptics_ts_priv, early_suspend);
+	synaptics_ts_resume(p_ts->client);
 }
 #endif
 
@@ -1841,7 +2175,7 @@ static const struct i2c_device_id synaptics_ts_id[] = {
 static struct i2c_driver synaptics_ts_driver = {
 	.probe		= synaptics_ts_probe,
 	.remove		= synaptics_ts_remove,
-#ifndef CONFIG_HAS_EARLYSUSPEND 	//seven for late_resume_lcd
+#ifndef CONFIG_HAS_EARLYSUSPEND
 	.suspend	= synaptics_ts_suspend,
 	.resume		= synaptics_ts_resume,
 #endif
@@ -1854,11 +2188,12 @@ static struct i2c_driver synaptics_ts_driver = {
 
 static int __devinit synaptics_ts_init(void)
 {
-#ifdef FEATURE_LGE_TOUCH_REAL_TIME_WORK_QUEUE	
-	synaptics_wq = create_rt_workqueue("synaptics_wq");
+#ifdef FEATURE_LGE_TOUCH_REAL_TIME_WORK_QUEUE
+//	synaptics_wq = create_rt_workqueue("synaptics_wq");
+	synaptics_wq = alloc_workqueue("synaptics_wq", WQ_MEM_RECLAIM | WQ_HIGHPRI | WQ_CPU_INTENSIVE, 1);
 #else
 	synaptics_wq = create_singlethread_workqueue("synaptics_wq");
-#endif /*FEATURE_LGE_TOUCH_REAL_TIME_WORK_QUEUE*/
+#endif
 
    	pr_warning("LGE: Synaptics ts_init\n");
 	if (!synaptics_wq)
@@ -1869,7 +2204,7 @@ static int __devinit synaptics_ts_init(void)
 static void __exit synaptics_ts_exit(void)
 {
 	i2c_del_driver(&synaptics_ts_driver);
-    
+
 	if (synaptics_wq)
 		destroy_workqueue(synaptics_wq);
 }
@@ -1878,5 +2213,6 @@ module_init(synaptics_ts_init);
 module_exit(synaptics_ts_exit);
 
 MODULE_DESCRIPTION("Synaptics Touchscreen Driver");
+MODULE_AUTHOR("Choi Daewan <ntdeaewan.choi@lge.com>");
 MODULE_LICENSE("GPL");
 

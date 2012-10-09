@@ -206,4 +206,3 @@ void
 nf_tproxy_assign_sock(struct sk_buff *skb, struct sock *sk);
 
 #endif
-

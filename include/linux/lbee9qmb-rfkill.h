@@ -1,6 +1,7 @@
 /*
  * Bluetooth+WiFi Murata LBEE19QMBC rfkill power control via GPIO
  *
+ * Copyright (C) 2012 LGE Inc.
  * Copyright (C) 2010 NVIDIA Corporation
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -22,22 +23,17 @@
 #ifndef __LBEE9QMB_RFKILL_H
 #define __LBEE9QMB_RFKILL_H
 
-#define BRCM_LPM
-#ifdef BRCM_LPM
-#define BRCM_HOST_WAKE
-#define BRCM_BT_WAKE
-#endif
-
 struct lbee9qmb_platform_data {
 	int gpio_reset;
-#ifdef BRCM_BT_WAKE
 	int gpio_btwake;
-#endif
-#ifdef BRCM_HOST_WAKE
 	int gpio_hostwake;
-#endif	
 	int gpio_pwr;
+	int active_low;
 	int delay;
+// LGE_SJIT_S 11/18/2011 [mohamed.khadri@lge.com] BT UART Enable
+        int (*chip_enable) (void);
+        int (*chip_disable) (void);
+// LGE_SJIT_E 11/18/2011 [mohamed.khadri@lge.com] BT UART Enable
 };
 
 #endif

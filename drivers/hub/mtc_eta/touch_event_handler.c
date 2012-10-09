@@ -195,7 +195,7 @@ static void mtc_eta_event_log_event(struct input_handle *handle, unsigned int ty
 						PDEBUG("Wrong touch state in ABS_MT_TOUCH_MAJOR\n");
 					}
 #endif
-								touch_state = TOUCH_STATE_DOWN;
+					touch_state = TOUCH_STATE_DOWN;
 					break;
 				case ABS_MT_POSITION_X:
 					temp_x = (value * 462 / 1000) ;

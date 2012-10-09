@@ -378,7 +378,7 @@ static void isph3a_aewb_set_params(struct isp_h3a_device *isp_h3a,
 		isp_h3a->update = 1;
 	}
 
-	isp_h3a->aewb_config_local.aewb_enable = user_cfg->aewb_enable;;
+	isp_h3a->aewb_config_local.aewb_enable = user_cfg->aewb_enable;
 }
 
 /**
@@ -459,7 +459,7 @@ int isph3a_aewb_request_statistics(struct isp_h3a_device *isp_h3a,
 		       "update => %d)\n",
 		       aewbdata->frame_number, isp_h3a->stat.frame_number,
 		       aewbdata->update);
-	DPRINTK_ISPH3A("User data received: \n");
+	DPRINTK_ISPH3A("User data received:\n");
 	DPRINTK_ISPH3A("Digital gain = 0x%04x\n", aewbdata->dgain);
 	DPRINTK_ISPH3A("WB gain b *=   0x%04x\n", aewbdata->wb_gain_b);
 	DPRINTK_ISPH3A("WB gain r *=   0x%04x\n", aewbdata->wb_gain_r);

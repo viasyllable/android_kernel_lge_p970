@@ -922,14 +922,14 @@ static int get_dss_clocks(void)
 		return PTR_ERR(dispc.dss_ick);
 	}
 
-	dispc.dss1_fck = clk_get(&dispc.fbdev->dssdev->dev, "dss1_fck");
+	dispc.dss1_fck = clk_get(&dispc.fbdev->dssdev->dev, "fck");
 	if (IS_ERR(dispc.dss1_fck)) {
 		dev_err(dispc.fbdev->dev, "can't get dss1_fck\n");
 		clk_put(dispc.dss_ick);
 		return PTR_ERR(dispc.dss1_fck);
 	}
 
-	dispc.dss_54m_fck = clk_get(&dispc.fbdev->dssdev->dev, "tv_fck");
+	dispc.dss_54m_fck = clk_get(&dispc.fbdev->dssdev->dev, "tv_clk");
 	if (IS_ERR(dispc.dss_54m_fck)) {
 		dev_err(dispc.fbdev->dev, "can't get tv_fck\n");
 		clk_put(dispc.dss_ick);
@@ -1441,6 +1441,19 @@ static int omap_dispc_init(struct omapfb_device *fbdev, int ext_mode,
 
 	l = dispc_read_reg(DISPC_IRQSTATUS);
 	dispc_write_reg(DISPC_IRQSTATUS, l);
+
+/* LGE_CHANGE_S [daewung.kim@lge.com] 2012-04-13, patch for boot failure by COMPLEXIO_ERR interrupt
+ * Derived from Froyo, Gingerbread field issue patch */
+#ifdef CONFIG_OMAP2_DSS_DSI
+	/* disable the dsi interrupts so no spurious dsi irq's are deliverd
+	 * before the dsi block is fully initialzed -- this is especially an
+	 * issue if skip_init is true, as resetting the dss block would clear
+	 * these interupts anyway */
+	omap_writel(0, 0x4804FC1C); // DSI_IRQENABLE
+	omap_writel(0xFFFFFFFF, 0x4804FC4C); // COMPLEXIO_ERR
+	omap_writel(0x00FFFFFF, 0x4804FC18); // DSI_IRQSTATUS
+#endif
+/* LGE_CHANGE_S [daewung.kim@lge.com] 2012-04-13 */
 
 	recalc_irq_mask();
 

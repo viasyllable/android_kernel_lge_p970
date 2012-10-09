@@ -231,6 +231,7 @@ enum v4l2_int_ioctl_num {
 	 *
 	 */
 	vidioc_int_priv_start_num = 2000,
+
 	/* VIDIOC_INT_PRIV_G_PIXCLK */
 	vidioc_int_priv_g_pixclk_num,
 	/* VIDIOC_INT_PRIV_G_ACTIVESIZE */
@@ -241,6 +242,7 @@ enum v4l2_int_ioctl_num {
 	vidioc_int_priv_g_pixelsize_num,
 	/* VIDIOC_INT_PRIV_G_PIXCLK_ACTIVE */
 	vidioc_int_priv_g_pixclk_active_num,
+
 };
 
 /*

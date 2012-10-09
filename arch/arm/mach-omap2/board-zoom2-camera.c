@@ -26,7 +26,6 @@
 #include <mach/gpio.h>
 #include <plat/omap-pm.h>
 
-static int cam_inited;
 #include <media/v4l2-int-device.h>
 #include <../drivers/media/video/omap34xxcam.h>
 #include <../drivers/media/video/isp/ispreg.h>
@@ -41,12 +40,12 @@ static int cam_inited;
 #define VAUX_DEV_GRP_P1		0x20
 #define VAUX_DEV_GRP_NONE	0x00
 
-#define CAMZOOM2_USE_XCLKB  	1
+#define CAMZOOM2_USE_XCLKB	1
 
 #define ISP_IMX046_MCLK		216000000
 
 /* Sensor specific GPIO signals */
-#define IMX046_RESET_GPIO  	98
+#define IMX046_RESET_GPIO	98
 #define IMX046_STANDBY_GPIO	58
 
 #if defined(CONFIG_VIDEO_IMX046) || defined(CONFIG_VIDEO_IMX046_MODULE)
@@ -74,6 +73,9 @@ static int cam_inited;
 #define LV8093_PWR_ON			(!LV8093_PWR_OFF)
 #endif
 
+static struct pm_qos_request_list pm_qos_handler;
+#define SET_MPU_CONSTRAINT         12
+#define CLEAR_MPU_CONSTRAINT       -1
 
 #ifdef CONFIG_VIDEO_LV8093
 static int lv8093_lens_power_set(enum v4l2_power power)
@@ -82,7 +84,7 @@ static int lv8093_lens_power_set(enum v4l2_power power)
 
 	switch (power) {
 	case V4L2_POWER_ON:
-		printk(KERN_DEBUG "lv8093_lens_power_set(ON)\n");
+		pr_debug("lv8093_lens_power_set(ON)\n");
 		if (previous_pwr == V4L2_POWER_OFF) {
 			if (gpio_request(LV8093_PS_GPIO, "lv8093_ps") != 0) {
 				printk(KERN_WARNING "Could not request GPIO %d"
@@ -96,11 +98,11 @@ static int lv8093_lens_power_set(enum v4l2_power power)
 		gpio_set_value(LV8093_PS_GPIO, LV8093_PWR_ON);
 		break;
 	case V4L2_POWER_OFF:
-		printk(KERN_DEBUG "lv8093_lens_power_set(OFF)\n");
+		pr_debug("lv8093_lens_power_set(OFF)\n");
 		gpio_free(LV8093_PS_GPIO);
 		break;
 	case V4L2_POWER_STANDBY:
-		printk(KERN_DEBUG "lv8093_lens_power_set(STANDBY)\n");
+		pr_debug("lv8093_lens_power_set(STANDBY)\n");
 		gpio_set_value(LV8093_PS_GPIO, LV8093_PWR_OFF);
 		break;
 	}
@@ -127,7 +129,6 @@ struct lv8093_platform_data zoom2_lv8093_platform_data = {
 #if defined(CONFIG_VIDEO_IMX046) || defined(CONFIG_VIDEO_IMX046_MODULE)
 
 static struct omap34xxcam_sensor_config imx046_hwc = {
-	.sensor_isp  = 0,
 	.capture_mem = IMX046_BIGGEST_FRAME_BYTE_SIZE * 4,
 	.ival_default	= { 1, 10 },
 	.isp_if = ISP_CSIA,
@@ -146,38 +147,38 @@ static int imx046_sensor_set_prv_data(struct v4l2_int_device *s, void *priv)
 }
 
 static struct isp_interface_config imx046_if_config = {
-	.ccdc_par_ser 		= ISP_CSIA,
-	.dataline_shift 	= 0x0,
-	.hsvs_syncdetect 	= ISPCTRL_SYNC_DETECT_VSRISE,
-	.strobe 		= 0x0,
-	.prestrobe 		= 0x0,
-	.shutter 		= 0x0,
-	.wenlog 		= ISPCCDC_CFG_WENLOG_AND,
+	.ccdc_par_ser		= ISP_CSIA,
+	.dataline_shift		= 0x0,
+	.hsvs_syncdetect	= ISPCTRL_SYNC_DETECT_VSRISE,
+	.strobe			= 0x0,
+	.prestrobe		= 0x0,
+	.shutter		= 0x0,
+	.wenlog			= ISPCCDC_CFG_WENLOG_AND,
 	.wait_hs_vs		= 0,
 	.cam_mclk		= ISP_IMX046_MCLK,
 	.raw_fmt_in		= ISPCCDC_INPUT_FMT_RG_GB,
-	.u.csi.crc 		= 0x0,
-	.u.csi.mode 		= 0x0,
-	.u.csi.edge 		= 0x0,
-	.u.csi.signalling 	= 0x0,
-	.u.csi.strobe_clock_inv = 0x0,
-	.u.csi.vs_edge 		= 0x0,
-	.u.csi.channel 		= 0x0,
-	.u.csi.vpclk 		= 0x2,
-	.u.csi.data_start 	= 0x0,
-	.u.csi.data_size 	= 0x0,
-	.u.csi.format 		= V4L2_PIX_FMT_SGRBG10,
+	.u.csi.crc		= 0x0,
+	.u.csi.mode		= 0x0,
+	.u.csi.edge		= 0x0,
+	.u.csi.signalling	= 0x0,
+	.u.csi.strobe_clock_inv	= 0x0,
+	.u.csi.vs_edge		= 0x0,
+	.u.csi.channel		= 0x0,
+	.u.csi.vpclk		= 0x2,
+	.u.csi.data_start	= 0x0,
+	.u.csi.data_size	= 0x0,
+	.u.csi.format		= V4L2_PIX_FMT_SGRBG10,
 };
 
 
-static int imx046_sensor_power_set(struct v4l2_int_device *s, enum v4l2_power power)
+static int imx046_sensor_power_set(struct v4l2_int_device *s,
+						enum v4l2_power power)
 {
 	struct omap34xxcam_videodev *vdev = s->u.slave->master->priv;
 	struct isp_device *isp = dev_get_drvdata(vdev->cam->isp);
 	struct isp_csi2_lanes_cfg lanecfg;
 	struct isp_csi2_phy_cfg phyconfig;
 	static enum v4l2_power previous_power = V4L2_POWER_OFF;
-	static struct pm_qos_request_list *qos_request;
 	int err = 0;
 
 	switch (power) {
@@ -194,7 +195,8 @@ static int imx046_sensor_power_set(struct v4l2_int_device *s, enum v4l2_power po
 					 OCP_INITIATOR_AGENT, 800000);
 
 		/* Hold a constraint to keep MPU in C1 */
-		omap_pm_set_max_mpu_wakeup_lat(&qos_request, 12);
+		pm_qos_update_request(&pm_qos_handler,
+							SET_MPU_CONSTRAINT);
 
 		isp_csi2_reset(&isp->isp_csi2);
 
@@ -267,8 +269,10 @@ static int imx046_sensor_power_set(struct v4l2_int_device *s, enum v4l2_power po
 		gpio_free(IMX046_RESET_GPIO);
 
 		/* Remove pm constraints */
-		omap_pm_set_min_bus_tput(vdev->cam->isp, OCP_INITIATOR_AGENT, 0);
-		omap_pm_set_max_mpu_wakeup_lat(&qos_request, -1);
+		omap_pm_set_min_bus_tput(vdev->cam->isp,
+						OCP_INITIATOR_AGENT, 0);
+		pm_qos_update_request(&pm_qos_handler,
+							CLEAR_MPU_CONSTRAINT);
 
 		/* Make sure not to disable the MCLK twice in a row */
 		if (previous_power == V4L2_POWER_ON)
@@ -356,7 +360,8 @@ struct imx046_platform_data zoom2_imx046_platform_data = {
 
 void __init zoom2_cam_init(void)
 {
-	cam_inited = 0;
+	pm_qos_add_request(&pm_qos_handler, PM_QOS_CPU_DMA_LATENCY,
+						CLEAR_MPU_CONSTRAINT);
 	/* Request and configure gpio pins */
 	if (gpio_request(IMX046_STANDBY_GPIO, "ov3640_standby_gpio") != 0) {
 		printk(KERN_ERR "Could not request GPIO %d",
@@ -366,7 +371,5 @@ void __init zoom2_cam_init(void)
 
 	/* set to output mode */
 	gpio_direction_output(IMX046_STANDBY_GPIO, true);
-
-	cam_inited = 1;
 }
 #endif

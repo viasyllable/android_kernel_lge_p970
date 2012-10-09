@@ -30,21 +30,6 @@ MODULE_AUTHOR("Texas Instruments");
 MODULE_DESCRIPTION("OMAP Video library");
 MODULE_LICENSE("GPL");
 
-#define LG_FW_ISP_RESERVE /* 20110716 dongyu.gwak@lge.com reserve isp for camera */
-
-#ifdef CONFIG_OMAP3_ISP_RESIZER
-/* with isp resizer, resizing limitation in 34xx is 8x to 1/8x scaling. */
-#ifdef LG_FW_ISP_RESERVE /* 20110716 dongyu.gwak@lge.com reserve isp for camera */
-extern int isp_reserve;
-#define DOWNSCALE_RATIO_ISP 8
-#define DOWNSCALE_RATIO_DSS 4
-#else /*LG_FW_ISP_RESERVE*/
-#define DOWNSCALE_RATIO 8
-#endif /*LG_FW_ISP_RESERVE*/
-#else
-#define DOWNSCALE_RATIO 4
-#endif
-
 /* Return the default overlay cropping rectangle in crop given the image
  * size in pix and the video display size in fbuf.  The default
  * cropping rectangle is the largest rectangle no larger than the capture size
@@ -68,7 +53,7 @@ EXPORT_SYMBOL_GPL(omap_vout_default_crop);
 /* Given a new render window in new_win, adjust the window to the
  * nearest supported configuration.  The adjusted window parameters are
  * returned in new_win.
- * Returns zero if succesful, or -EINVAL if the requested window is
+ * Returns zero if successful, or -EINVAL if the requested window is
  * impossible and cannot reasonably be adjusted.
  */
 int omap_vout_try_window(struct v4l2_framebuffer *fbuf,
@@ -106,6 +91,7 @@ int omap_vout_try_window(struct v4l2_framebuffer *fbuf,
 
 	/* We now have a valid preview window, so go with it */
 	new_win->w = try_win;
+	new_win->field = V4L2_FIELD_ANY;
 	return 0;
 }
 EXPORT_SYMBOL_GPL(omap_vout_try_window);
@@ -115,7 +101,7 @@ EXPORT_SYMBOL_GPL(omap_vout_try_window);
  * will also be adjusted if necessary.  Preference is given to keeping the
  * the window as close to the requested configuration as possible.  If
  * successful, new_win, vout->win, and crop are updated.
- * Returns zero if succesful, or -EINVAL if the requested preview window is
+ * Returns zero if successful, or -EINVAL if the requested preview window is
  * impossible and cannot reasonably be adjusted.
  */
 int omap_vout_new_window(struct v4l2_rect *crop,
@@ -124,14 +110,6 @@ int omap_vout_new_window(struct v4l2_rect *crop,
 {
 	int err;
 
-#ifdef LG_FW_ISP_RESERVE /* 20110716 dongyu.gwak@lge.com reserve isp for camera */
-	int  DOWNSCALE_RATIO;
-	if(!isp_reserve)
-		DOWNSCALE_RATIO = DOWNSCALE_RATIO_ISP;
-	else
-		DOWNSCALE_RATIO = DOWNSCALE_RATIO_DSS;
-#endif /*LG_FW_ISP_RESERVE*/
-	printk("omap_vout_new_window()\n");
 	err = omap_vout_try_window(fbuf, new_win);
 	if (err)
 		return err;
@@ -140,8 +118,6 @@ int omap_vout_new_window(struct v4l2_rect *crop,
 	win->w = new_win->w;
 	win->field = new_win->field;
 	win->chromakey = new_win->chromakey;
-        if (cpu_is_omap44xx())
-            win->zorder = new_win->zorder;
 
 	/* Adjust the cropping window to allow for resizing limitation */
 	if (cpu_is_omap24xx()) {
@@ -161,12 +137,12 @@ int omap_vout_new_window(struct v4l2_rect *crop,
 				crop->width = 768;
 		}
 	} else if (cpu_is_omap34xx()) {
-		/* TODO: It assumed ISP resizer enabled */
-		if ((crop->height/win->w.height) >= DOWNSCALE_RATIO)
-			crop->height = win->w.height * DOWNSCALE_RATIO;
+		/* For 34xx limit is 8x to 1/4x scaling. */
+		if ((crop->height/win->w.height) >= 4)
+			crop->height = win->w.height * 4;
 
-		if ((crop->width/win->w.width) >= DOWNSCALE_RATIO)
-			crop->width = win->w.width * DOWNSCALE_RATIO;
+		if ((crop->width/win->w.width) >= 4)
+			crop->width = win->w.width * 4;
 	}
 	return 0;
 }
@@ -179,25 +155,15 @@ EXPORT_SYMBOL_GPL(omap_vout_new_window);
  * window would fall outside the display boundaries, the cropping rectangle
  * will also be adjusted to maintain the rescaling ratios.  If successful, crop
  * and win are updated.
- * Returns zero if succesful, or -EINVAL if the requested cropping rectangle is
+ * Returns zero if successful, or -EINVAL if the requested cropping rectangle is
  * impossible and cannot reasonably be adjusted.
  */
 int omap_vout_new_crop(struct v4l2_pix_format *pix,
 	      struct v4l2_rect *crop, struct v4l2_window *win,
-		struct v4l2_framebuffer *fbuf, const struct v4l2_rect *new_crop,
-		int *use_isp_rsz_for_downscale)
+	      struct v4l2_framebuffer *fbuf, const struct v4l2_rect *new_crop)
 {
 	struct v4l2_rect try_crop;
 	unsigned long vresize, hresize;
-
-#ifdef LG_FW_ISP_RESERVE /* 20110716 dongyu.gwak@lge.com reserve isp for camera */
-	int  DOWNSCALE_RATIO;
-	if(!isp_reserve)
-		DOWNSCALE_RATIO = DOWNSCALE_RATIO_ISP;
-	else
-		DOWNSCALE_RATIO = DOWNSCALE_RATIO_DSS;
-	printk("omap_vout_new_crop()\n");
-#endif /*LG_FW_ISP_RESERVE*/
 
 	/* make a working copy of the new_crop rectangle */
 	try_crop = *new_crop;
@@ -226,11 +192,8 @@ int omap_vout_new_crop(struct v4l2_pix_format *pix,
 	if (try_crop.width <= 0 || try_crop.height <= 0)
 		return -EINVAL;
 
-	if (win->w.width <= 0 || win->w.height <= 0)
-		return -EINVAL;
-
 	if (cpu_is_omap24xx()) {
-		if (crop->height != win->w.height) {
+		if (try_crop.height != win->w.height) {
 			/* If we're resizing vertically, we can't support a
 			 * crop width wider than 768 pixels.
 			 */
@@ -239,42 +202,11 @@ int omap_vout_new_crop(struct v4l2_pix_format *pix,
 		}
 	}
 	/* vertical resizing */
-	vresize = (1024 * crop->height) / win->w.height;
+	vresize = (1024 * try_crop.height) / win->w.height;
 	if (cpu_is_omap24xx() && (vresize > 2048))
 		vresize = 2048;
-	else if (cpu_is_omap34xx()) {
-#ifdef CONFIG_OMAP3_ISP_RESIZER
-#ifdef LG_FW_ISP_RESERVE /* 20110804 dongyu.gwak@lge.com isp reserve */ 
-		if (!isp_reserve){
-			if (vresize > 4096) {
-				*use_isp_rsz_for_downscale = 1;
-				printk(KERN_INFO "\n<%s> Using ISP resizer vresize "
-						"= %lu\n\n",
-						__func__, vresize);
-				if (vresize > 8096)
-					vresize = 8096;
-			}
-		}
-		else
-		{
-			if (vresize > 4096)
-				vresize = 4096;
-		}
-#else /* LG_FW_ISP_RESERVE */
-		if (vresize > 4096) {
-			*use_isp_rsz_for_downscale = 1;
-			printk(KERN_INFO "\n<%s> Using ISP resizer vresize "
-					"= %lu\n\n",
-					__func__, vresize);
-			if (vresize > 8096)
-				vresize = 8096;
-		}
-#endif /* LG_FW_ISP_RESERVE */
-#else
-		if (vresize > 4096)
+	else if (cpu_is_omap34xx() && (vresize > 4096))
 		vresize = 4096;
-#endif
-	}
 
 	win->w.height = ((1024 * try_crop.height) / vresize) & ~1;
 	if (win->w.height == 0)
@@ -289,52 +221,12 @@ int omap_vout_new_crop(struct v4l2_pix_format *pix,
 			try_crop.height = 2;
 	}
 	/* horizontal resizing */
-	hresize = (1024 * crop->width) / win->w.width;
-	if (cpu_is_omap24xx() && (hresize > 2048)) {
+	hresize = (1024 * try_crop.width) / win->w.width;
+	if (cpu_is_omap24xx() && (hresize > 2048))
 		hresize = 2048;
-	} else if (cpu_is_omap34xx()) {
-#ifdef CONFIG_OMAP3_ISP_RESIZER
-#ifdef LG_FW_ISP_RESERVE /* 20110804 dongyu.gwak@lge.com isp reserve */ 
-		if (!isp_reserve){
-			/* DSS DMA resizer handles the 8x to 1/4x horz scaling
-			 * for 1/4x to 1/8x scaling ISP resizer is used
-			 * for width > 1024 and scaling 1/2x-1/8x ISP resizer is used
-			 */
-			if (hresize > 4096
-					||(hresize > 2048 && try_crop.width > 1024)) {
-				*use_isp_rsz_for_downscale = 1;
-				printk(KERN_INFO "\n<%s> Using ISP resizer "
-						"hresize = %lu, width = %u\n\n",
-						__func__, hresize, try_crop.width);
-				if (hresize > 8096)
-					hresize = 8096;
-			}
-		}
-		else
-		{
-			if (hresize > 4096)
-				hresize = 4096;
-		}
-#else /* LG_FW_ISP_RESERVE */ 
-		/* DSS DMA resizer handles the 8x to 1/4x horz scaling
-		 * for 1/4x to 1/8x scaling ISP resizer is used
-		 * for width > 1024 and scaling 1/2x-1/8x ISP resizer is used
-		 */
-		if (hresize > 4096
-				||(hresize > 2048 && try_crop.width > 1024)) {
-			*use_isp_rsz_for_downscale = 1;
-			printk(KERN_INFO "\n<%s> Using ISP resizer "
-					"hresize = %lu, width = %u\n\n",
-					__func__, hresize, try_crop.width);
-			if (hresize > 8096)
-				hresize = 8096;
-		}
-#endif /* LG_FW_ISP_RESERVE */
-#else
-		if (hresize > 4096)
+	else if (cpu_is_omap34xx() && (hresize > 4096))
 		hresize = 4096;
-#endif
-	}
+
 	win->w.width = ((1024 * try_crop.width) / hresize) & ~1;
 	if (win->w.width == 0)
 		win->w.width = 2;
@@ -363,12 +255,11 @@ int omap_vout_new_crop(struct v4l2_pix_format *pix,
 				try_crop.width = 768;
 		}
 	} else if (cpu_is_omap34xx()) {
-		/* TODO: It assumed ISP resizer enabled */
-		if ((try_crop.height/win->w.height) >= DOWNSCALE_RATIO)
-			try_crop.height = win->w.height * DOWNSCALE_RATIO;
+		if ((try_crop.height/win->w.height) >= 4)
+			try_crop.height = win->w.height * 4;
 
-		if ((try_crop.width/win->w.width) >= DOWNSCALE_RATIO)
-			try_crop.width = win->w.width * DOWNSCALE_RATIO;
+		if ((try_crop.width/win->w.width) >= 4)
+			try_crop.width = win->w.width * 4;
 	}
 	/* update our cropping rectangle and we're done */
 	*crop = try_crop;

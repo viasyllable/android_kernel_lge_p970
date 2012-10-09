@@ -6,8 +6,8 @@
  * Copyright (C)2009 Texas Instruments, Inc.
  *
  * Contributors:
- * 	Sameer Venkatraman <sameerv@ti.com>
- * 	Mohit Jalori
+ *	Sameer Venkatraman <sameerv@ti.com>
+ *	Mohit Jalori
  *	Sergio Aguirre <saaguirre@ti.com>
  *
  * This package is free software; you can redistribute it and/or modify

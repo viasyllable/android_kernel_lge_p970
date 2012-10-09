@@ -1,3 +1,4 @@
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.07.26] - CAM : from black froyo
 /*
  * drivers/media/video/yacd5b1s.h
  *
@@ -223,3 +224,4 @@ enum yacd5b1s_pll_type {
 };
 
 #endif /* ifndef yacd5b1s_H */
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.07.26] - CAM : from black froyo

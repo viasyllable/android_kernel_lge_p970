@@ -133,6 +133,16 @@ static const u8 twl6030_rtc_reg_map[] = {
 
 /*----------------------------------------------------------------------*/
 static u8  *rtc_reg_map;
+//20101104 taehwan.kim@lge.com temporary rtc wakeup module [START_LGE]
+#define TEMP_TRICKLE_MONITOR 1
+#if TEMP_TRICKLE_MONITOR
+#define MONITOR_INTERVAL 240
+#define RESERVED_ALARM_BUFFER 120
+unsigned char reserved_alarm_data[ALL_TIME_REGS + 1] = { 0 };
+int set_trickle_alarm = 0;
+#endif
+
+//20101104 taehwan.kim@lge.com temporary rtc wakeup module [END_LGE]
 
 /*
  * Supports 1 byte read from TWL RTC register.
@@ -161,19 +171,6 @@ static int twl_rtc_write_u8(u8 data, u8 reg)
 		       "register %X - error %d\n", reg, ret);
 	return ret;
 }
-
-#ifdef CONFIG_ARCH_OMAP4
-static int twl_rtc_read(u8 *value, u8 reg, unsigned num_bytes)
-{
-	int ret = 0, i = 0;
-
-	for (i = 0; i < num_bytes; i++)
-		if (twl_rtc_read_u8(value + i, (reg + i)))
-			return ret;
-
-	return ret;
-}
-#endif
 
 /*
  * Cache the value for timer/alarm interrupts register; this is
@@ -226,17 +223,103 @@ static int twl_rtc_alarm_irq_enable(struct device *dev, unsigned enabled)
 	return ret;
 }
 
-static int twl_rtc_update_irq_enable(struct device *dev, unsigned enabled)
+//20101104 taehwan.kim@lge.com temporary RTC wakeup module [START_LGE]
+#if TEMP_TRICKLE_MONITOR 
+int set_trickle_charge_monitor(int enable)
 {
 	int ret;
+	unsigned char val, retval;
 
-	if (enabled)
-		ret = set_rtc_irq_bit(BIT_RTC_INTERRUPTS_REG_IT_TIMER_M);
+	if (enable == 1)
+	{
+		unsigned char rtc_data[ALL_TIME_REGS + 1] = { 0 };
+
+		u8 save_control = 0;
+		struct rtc_time tm;
+		u8 rd_data, wr_data;
+		unsigned char alarm_data[ALL_TIME_REGS + 1];
+		unsigned long time_value, reseved_alarm_value = 0;
+		ret = twl_rtc_read_u8(&save_control, REG_RTC_CTRL_REG);
+		if (ret < 0)
+			return ret;
+		save_control |= BIT_RTC_CTRL_REG_GET_TIME_M;
+
+		ret = twl_rtc_write_u8(save_control, REG_RTC_CTRL_REG);
+		if (ret < 0)
+			return ret;
+#ifndef CONFIG_ARCH_OMAP4
+		ret = twl_i2c_read(TWL_MODULE_RTC, rtc_data,
+				(rtc_reg_map[REG_SECONDS_REG]), ALL_TIME_REGS);
+#else
+		ret = twl_rtc_read(rtc_data, REG_SECONDS_REG, ALL_TIME_REGS);
+#endif
+		if (ret < 0) {
+			printk ("rtc_read_time error %d\n", ret);
+			return ret;
+		}
+		tm.tm_sec = bcd2bin(rtc_data[0]);
+		tm.tm_min = bcd2bin(rtc_data[1]);
+		tm.tm_hour = bcd2bin(rtc_data[2]);
+		tm.tm_mday = bcd2bin(rtc_data[3]);
+		tm.tm_mon = bcd2bin(rtc_data[4]) - 1;
+		tm.tm_year = bcd2bin(rtc_data[5]) + 100;
+		time_value = mktime(tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+		printk("[RTC] Current Time H %d, M %d time = %ld \n",tm.tm_hour, tm.tm_min, time_value);
+		time_value += MONITOR_INTERVAL;
+
+		rtc_time_to_tm(time_value, &tm);
+
+		alarm_data[1] = bin2bcd(tm.tm_sec);
+		alarm_data[2] = bin2bcd(tm.tm_min);
+		alarm_data[3] = bin2bcd(tm.tm_hour);
+		alarm_data[4] = bin2bcd(tm.tm_mday);
+		alarm_data[5] = bin2bcd(tm.tm_mon + 1);
+		alarm_data[6] = bin2bcd(tm.tm_year - 100);
+		printk("[RTC] Set Time H %d, M %d time = %ld \n",tm.tm_hour, tm.tm_min, time_value);
+
+		if (rtc_irq_bits & BIT_RTC_INTERRUPTS_REG_IT_ALARM_M) {
+#ifndef CONFIG_ARCH_OMAP4
+			ret = twl_i2c_read(TWL_MODULE_RTC, reserved_alarm_data,
+					(rtc_reg_map[REG_ALARM_SECONDS_REG]), ALL_TIME_REGS);
+#else
+			ret = twl_rtc_read(reserved_alarm_data, REG_ALARM_SECONDS_REG, ALL_TIME_REGS);
+#endif
+			if (ret < 0) {
+				printk("rtc_read_alarm error %d\n", ret);
+				return ret;
+			}
+			tm.tm_sec = bcd2bin(reserved_alarm_data[0]);
+			tm.tm_min = bcd2bin(reserved_alarm_data[1]);
+			tm.tm_hour = bcd2bin(reserved_alarm_data[2]);
+			tm.tm_mday = bcd2bin(reserved_alarm_data[3]);
+			tm.tm_mon = bcd2bin(reserved_alarm_data[4]) - 1;
+			tm.tm_year = bcd2bin(reserved_alarm_data[5]) + 100;
+			reseved_alarm_value = mktime(tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+			printk("[RTC] Reserved Time H %d, M %d time = %ld \n",tm.tm_hour, tm.tm_min, reseved_alarm_value);
+
+		}
+        ret = twl_rtc_read_u8(&rd_data, REG_RTC_STATUS_REG);
+		wr_data = rd_data & ~(BIT_RTC_STATUS_REG_ALARM_M);
+		twl_rtc_write_u8(wr_data, REG_RTC_STATUS_REG);
+
+		if ((reseved_alarm_value > time_value+RESERVED_ALARM_BUFFER)||(reseved_alarm_value < time_value-MONITOR_INTERVAL-1))
+		{
+			ret = twl_i2c_write(TWL_MODULE_RTC, alarm_data,
+					(rtc_reg_map[REG_ALARM_SECONDS_REG]), ALL_TIME_REGS);
+			ret = set_rtc_irq_bit(BIT_RTC_INTERRUPTS_REG_IT_ALARM_M);
+			set_trickle_alarm = 1;
+		}
+	}
 	else
-		ret = mask_rtc_irq_bit(BIT_RTC_INTERRUPTS_REG_IT_TIMER_M);
+	{
+		ret = mask_rtc_irq_bit(BIT_RTC_INTERRUPTS_REG_IT_ALARM_M);
+	}
 
-	return ret;
+	return 0;
 }
+EXPORT_SYMBOL(set_trickle_charge_monitor);
+#endif
+//20101104 taehwan.kim@lge.com temporary RTC wakeup module [END_LGE]
 
 /*
  * Gets current TWL RTC time and date parameters.
@@ -263,12 +346,9 @@ static int twl_rtc_read_time(struct device *dev, struct rtc_time *tm)
 	if (ret < 0)
 		return ret;
 
-#ifndef CONFIG_ARCH_OMAP4
 	ret = twl_i2c_read(TWL_MODULE_RTC, rtc_data,
 			(rtc_reg_map[REG_SECONDS_REG]), ALL_TIME_REGS);
-#else
-	ret = twl_rtc_read(rtc_data, REG_SECONDS_REG, ALL_TIME_REGS);
-#endif
+
 	if (ret < 0) {
 		dev_err(dev, "rtc_read_time error %d\n", ret);
 		return ret;
@@ -330,12 +410,9 @@ static int twl_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alm)
 {
 	unsigned char rtc_data[ALL_TIME_REGS + 1];
 	int ret;
-#ifndef CONFIG_ARCH_OMAP4
+
 	ret = twl_i2c_read(TWL_MODULE_RTC, rtc_data,
 			(rtc_reg_map[REG_ALARM_SECONDS_REG]), ALL_TIME_REGS);
-#else
-	ret = twl_rtc_read(rtc_data, REG_ALARM_SECONDS_REG, ALL_TIME_REGS);
-#endif
 	if (ret < 0) {
 		dev_err(dev, "rtc_read_alarm error %d\n", ret);
 		return ret;
@@ -393,14 +470,6 @@ static irqreturn_t twl_rtc_interrupt(int irq, void *rtc)
 	int res;
 	u8 rd_reg;
 
-#ifdef CONFIG_LOCKDEP
-	/* WORKAROUND for lockdep forcing IRQF_DISABLED on us, which
-	 * we don't want and can't tolerate.  Although it might be
-	 * friendlier not to borrow this thread context...
-	 */
-	local_irq_enable();
-#endif
-
 	res = twl_rtc_read_u8(&rd_reg, REG_RTC_STATUS_REG);
 	if (res)
 		goto out;
@@ -452,7 +521,6 @@ static struct rtc_class_ops twl_rtc_ops = {
 	.read_alarm	= twl_rtc_read_alarm,
 	.set_alarm	= twl_rtc_set_alarm,
 	.alarm_irq_enable = twl_rtc_alarm_irq_enable,
-	.update_irq_enable = twl_rtc_update_irq_enable,
 };
 
 /*----------------------------------------------------------------------*/
@@ -460,24 +528,12 @@ static struct rtc_class_ops twl_rtc_ops = {
 static int __devinit twl_rtc_probe(struct platform_device *pdev)
 {
 	struct rtc_device *rtc;
-	int ret = 0;
+	int ret = -EINVAL;
 	int irq = platform_get_irq(pdev, 0);
 	u8 rd_reg;
 
 	if (irq <= 0)
-		return -EINVAL;
-
-	rtc = rtc_device_register(pdev->name,
-				  &pdev->dev, &twl_rtc_ops, THIS_MODULE);
-	if (IS_ERR(rtc)) {
-		ret = PTR_ERR(rtc);
-		dev_err(&pdev->dev, "can't register RTC device, err %ld\n",
-			PTR_ERR(rtc));
-		goto out0;
-
-	}
-
-	platform_set_drvdata(pdev, rtc);
+		goto out1;
 
 	ret = twl_rtc_read_u8(&rd_reg, REG_RTC_STATUS_REG);
 	if (ret < 0)
@@ -494,21 +550,6 @@ static int __devinit twl_rtc_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto out1;
 
-#ifdef CONFIG_MACH_LGE_OMAP3
-	ret = request_threaded_irq(irq, NULL, twl_rtc_interrupt,
-			IRQF_TRIGGER_RISING,
-			dev_name(&rtc->dev), rtc);
-#else
-	ret = request_irq(irq, twl_rtc_interrupt,
-				IRQF_TRIGGER_RISING,
-				dev_name(&rtc->dev), rtc);
-#endif // CONFIG_MACH_LGE_OMAP3
-
-	if (ret < 0) {
-		dev_err(&pdev->dev, "IRQ is not free.\n");
-		goto out1;
-	}
-
 	if (twl_class_is_6030()) {
 		twl6030_interrupt_unmask(TWL6030_RTC_INT_MASK,
 			REG_INT_MSK_LINE_A);
@@ -519,28 +560,48 @@ static int __devinit twl_rtc_probe(struct platform_device *pdev)
 	/* Check RTC module status, Enable if it is off */
 	ret = twl_rtc_read_u8(&rd_reg, REG_RTC_CTRL_REG);
 	if (ret < 0)
-		goto out2;
+		goto out1;
 
 	if (!(rd_reg & BIT_RTC_CTRL_REG_STOP_RTC_M)) {
 		dev_info(&pdev->dev, "Enabling TWL-RTC.\n");
 		rd_reg = BIT_RTC_CTRL_REG_STOP_RTC_M;
 		ret = twl_rtc_write_u8(rd_reg, REG_RTC_CTRL_REG);
 		if (ret < 0)
-			goto out2;
+			goto out1;
 	}
 
 	/* init cached IRQ enable bits */
 	ret = twl_rtc_read_u8(&rtc_irq_bits, REG_RTC_INTERRUPTS_REG);
 	if (ret < 0)
-		goto out2;
+		goto out1;
 
-	return ret;
+	rtc = rtc_device_register(pdev->name,
+				  &pdev->dev, &twl_rtc_ops, THIS_MODULE);
+	if (IS_ERR(rtc)) {
+		ret = PTR_ERR(rtc);
+		dev_err(&pdev->dev, "can't register RTC device, err %ld\n",
+			PTR_ERR(rtc));
+		goto out1;
+
+	}
+
+	ret = request_threaded_irq(irq, NULL, twl_rtc_interrupt,
+				   IRQF_TRIGGER_RISING,
+				   dev_name(&rtc->dev), rtc);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "IRQ is not free.\n");
+		goto out2;
+	}
+
+	if (enable_irq_wake(irq) < 0)
+		dev_warn(&pdev->dev, "Cannot enable wakeup for IRQ %d\n", irq);
+
+	platform_set_drvdata(pdev, rtc);
+	return 0;
 
 out2:
-	free_irq(irq, rtc);
-out1:
 	rtc_device_unregister(rtc);
-out0:
+out1:
 	return ret;
 }
 

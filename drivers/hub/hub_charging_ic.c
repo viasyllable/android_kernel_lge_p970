@@ -31,6 +31,8 @@
 #include <linux/notifier.h>
 #if defined(CONFIG_HUB_MUIC)
 #include "hub_muic.h"
+#elif defined(CONFIG_MUIC)
+#include <linux/muic/muic.h>
 #elif defined(CONFIG_LGE_OMAP3_EXT_PWR)
 #include "usb_switch.h"
 #endif
@@ -203,12 +205,18 @@ EXPORT_SYMBOL(charging_ic_deactive);
 static void charging_ic_work_func(struct work_struct *work)
 {
 	printk(KERN_INFO "[charging_msg] %s\n", __FUNCTION__);
+#if defined(CONFIG_PRODUCT_LGE_LU6800)
+	//20101102 taehwan.kim@lge.com To support factory cal to prevent to deactive[START_LGE]
+	charger_state_update_by_other();
+	//20101102 taehwan.kim@lge.com To support factory cal to prevent to deactive[END_LGE]
+#else
 	if(charging_ic_status != CHARGING_IC_DEACTIVE) {
 		set_end_of_charge(1);
 		//charging_ic_deactive();
 		charger_state_update_by_other();
 		printk(KERN_INFO "[Battery] Charging IC - EOC\n");
 	}
+#endif
 }
 
 static void hub_charging_ic_intialize(void)
@@ -409,7 +417,7 @@ static int charging_ic_probe(struct platform_device *dev)
 	wake_lock_init(&power_off_charging_lock, WAKE_LOCK_SUSPEND, "Power Off Charging");
 	
 	charging_ic_status = CHARGING_IC_DEACTIVE;
-	
+
 	hub_charging_ic_intialize();
 
 	// for AT Command AT%CHARGE
@@ -485,15 +493,21 @@ extern void emergency_restart(void);
 static int lge_chg_reboot_event(struct notifier_block *this,
 				unsigned long event, void *cmd)
 {
-#if defined(CONFIG_HUB_MUIC) && !defined(CONFIG_LGE_OMAP3_EXT_PWR)
-	int mode;
-#endif
+	int mode = 0;
 	
 	if (event == SYS_POWER_OFF)
 	{
 #if defined(CONFIG_HUB_MUIC)
 		mode = get_muic_mode();
+/*LGSI_LGP970_FroyoToGB_Reboot_ChargerAnimation_Ajeesh_24AUG2011_START*/
 		if(((MUIC_NA_TA <= mode) && (mode <= MUIC_INVALID_CHG)) || (mode == MUIC_AP_USB))
+/*LGSI_LGP970_FroyoToGB_Reboot_ChargerAnimation_Ajeesh_24AUG2011_END*/
+
+// kibum.lee@lge.com 20120502 MUIC re-work start
+#elif defined(CONFIG_MUIC)
+		mode = muic_get_mode();
+		if(((MUIC_NA_TA <= mode) && (mode <= MUIC_INVALID_CHG)) || (mode == MUIC_AP_USB))
+// kibum.lee@lge.com 20120502 MUIC re-work end
 #elif defined(CONFIG_LGE_OMAP3_EXT_PWR)
 		if ( get_external_power_status() )
 #else

@@ -31,6 +31,7 @@
 #include <linux/version.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-common.h>
+#include <media/v4l2-ctrls.h>
 
 #define FM_DRV_VERSION            "0.10"
 /* Should match with FM_DRV_VERSION */
@@ -53,8 +54,6 @@
 
 #define FM_DRV_TX_TIMEOUT      (5*HZ)	/* 5 seconds */
 #define FM_DRV_RX_SEEK_TIMEOUT (20*HZ)	/* 20 seconds */
-
-#define NO_OF_ENTRIES_IN_ARRAY(array) (sizeof(array) / sizeof(array[0]))
 
 #define fmerr(format, ...) \
 	printk(KERN_ERR "fmdrv: " format, ## __VA_ARGS__)
@@ -233,5 +232,11 @@ struct fmdev {
 	u8 curr_fmmode; /* Current FM chip mode (TX, RX, OFF) */
 	struct fm_rx rx;	/* FM receiver info */
 	struct fmtx_data tx_data;
+
+	/* V4L2 ctrl framwork handler*/
+	struct v4l2_ctrl_handler ctrl_handler;
+
+	/* For core assisted locking */
+	struct mutex mutex;
 };
 #endif

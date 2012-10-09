@@ -30,7 +30,6 @@
 #include <mach/io.h>
 #include <plat/vrfb.h>
 #include <plat/sdrc.h>
-#include <plat/display.h>
 
 #ifdef DEBUG
 #define DBG(format, ...) pr_debug("VRFB: " format, ## __VA_ARGS__)
@@ -158,7 +157,7 @@ EXPORT_SYMBOL(omap_vrfb_max_height);
 
 void omap_vrfb_setup(struct vrfb *vrfb, unsigned long paddr,
 		u16 width, u16 height,
-		unsigned bytespp, bool yuv_mode, int rotation)
+		unsigned bytespp, bool yuv_mode)
 {
 	unsigned pixel_size_exp;
 	u16 vrfb_width;
@@ -166,23 +165,18 @@ void omap_vrfb_setup(struct vrfb *vrfb, unsigned long paddr,
 	u8 ctx = vrfb->context;
 	u32 size;
 	u32 control;
-	u16 temp;
 
 	DBG("omapfb_set_vrfb(%d, %lx, %dx%d, %d, %d)\n", ctx, paddr,
 			width, height, bytespp, yuv_mode);
+
+	vrfb_width = ALIGN(width, VRFB_PAGE_WIDTH);
 
 	/* For YUV2 and UYVY modes VRFB needs to handle pixels a bit
 	 * differently. See TRM. */
 	if (yuv_mode) {
 		bytespp *= 2;
 		width /= 2;
-	}
-
-	/* Configure the vrfb buffer for rotation*/
-	if (rotation == OMAP_DSS_ROT_90 || rotation == OMAP_DSS_ROT_270) {
-		temp = width;
-		width = height;
-		height = temp;
+		vrfb_width /= 2;
 	}
 
 	if (bytespp == 4)
@@ -192,13 +186,6 @@ void omap_vrfb_setup(struct vrfb *vrfb, unsigned long paddr,
 	else
 		BUG();
 
-	/* VDMA Optimization */
-	/* TODO: VDMA support for RGB16 mode */
-	if (cpu_is_omap3630() && yuv_mode)
-		if (rotation == OMAP_DSS_ROT_90 || rotation == OMAP_DSS_ROT_270)
-			pixel_size_exp = 2;
-
-	vrfb_width = ALIGN(width * bytespp, VRFB_PAGE_WIDTH) / bytespp;
 	vrfb_height = ALIGN(height, VRFB_PAGE_HEIGHT);
 
 	DBG("vrfb w %u, h %u bytespp %d\n", vrfb_width, vrfb_height, bytespp);
@@ -207,8 +194,10 @@ void omap_vrfb_setup(struct vrfb *vrfb, unsigned long paddr,
 	size |= vrfb_height << SMS_IMAGEHEIGHT_OFFSET;
 
 	control  = pixel_size_exp << SMS_PS_OFFSET;
-	control |= VRFB_PAGE_WIDTH_EXP  << SMS_PW_OFFSET;
-	control |= VRFB_PAGE_HEIGHT_EXP << SMS_PH_OFFSET;
+	if (!cpu_is_omap3630()) {
+		control |= VRFB_PAGE_WIDTH_EXP  << SMS_PW_OFFSET;
+		control |= VRFB_PAGE_HEIGHT_EXP << SMS_PH_OFFSET;
+	}
 
 	vrfb_hw_context[ctx].physical_ba = paddr;
 	vrfb_hw_context[ctx].size = size;

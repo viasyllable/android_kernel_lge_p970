@@ -350,7 +350,10 @@ DEVICE_ATTR(wake_lock, 0664, NULL, muic_store_wake_lock);
  * muic_probe() is called in the middle of booting sequence due to '__init'.
  * '__init' causes muic_probe() to be released after the booting.
  */
-static s32 __init muic_probe(struct i2c_client *client, const struct i2c_device_id *id){
+
+// kibum.lee@lge.com section mismatch error fix
+//static s32 __init muic_probe(struct i2c_client *client, const struct i2c_device_id *id){
+static s32 muic_probe(struct i2c_client *client, const struct i2c_device_id *id){
 
 	s32 ret = 0;
 	int err = 0;
@@ -375,7 +378,6 @@ static s32 __init muic_probe(struct i2c_client *client, const struct i2c_device_
 
 	/* Prepare a human accessible method to control MUIC */
 	create_hub_muic_proc_file();
-
 /* B-Prj Power off charging [kyungyoon.kim@lge.com] 2010-12-15 */
 	err = device_create_file(&client->dev, &dev_attr_wake_lock);
 	err = device_create_file(&client->dev, &dev_attr_charging_mode);

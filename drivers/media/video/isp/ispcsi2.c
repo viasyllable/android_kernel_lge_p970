@@ -7,8 +7,8 @@
  * Copyright (C) 2009 Texas Instruments.
  *
  * Contributors:
- * 	Sergio Aguirre <saaguirre@ti.com>
- * 	Dominic Curran <dcurran@ti.com>
+ *	Sergio Aguirre <saaguirre@ti.com>
+ *	Dominic Curran <dcurran@ti.com>
  *
  * This package is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -216,10 +216,10 @@ int isp_csi2_complexio_lanes_get(struct isp_csi2_device *isp_csi2)
 			    ISPCSI2_COMPLEXIO_CFG1);
 	for (i = 0; i < 4; i++) {
 		currlanes->data[i].pol = (reg &
-					  ISPCSI2_COMPLEXIO_CFG1_DATA_POL_MASK(i + 1)) >>
+			ISPCSI2_COMPLEXIO_CFG1_DATA_POL_MASK(i + 1)) >>
 			ISPCSI2_COMPLEXIO_CFG1_DATA_POL_SHIFT(i + 1);
 		currlanes->data[i].pos = (reg &
-					  ISPCSI2_COMPLEXIO_CFG1_DATA_POSITION_MASK(i + 1)) >>
+			ISPCSI2_COMPLEXIO_CFG1_DATA_POSITION_MASK(i + 1)) >>
 			ISPCSI2_COMPLEXIO_CFG1_DATA_POSITION_SHIFT(i + 1);
 		currlanes_u->data[i] = false;
 	}
@@ -1309,20 +1309,21 @@ int isp_csi2_ctx_get(struct isp_csi2_device *isp_csi2, u8 ctxnum)
 	isp_csi2->update_ctx_ctrl3[ctxnum] = false;
 
 	selected_ctx->data_offset = (isp_reg_readl(isp_csi2->dev,
-						   OMAP3_ISP_IOMEM_CSI2A,
-						   ISPCSI2_CTX_DAT_OFST(ctxnum)) &
+					OMAP3_ISP_IOMEM_CSI2A,
+					ISPCSI2_CTX_DAT_OFST(ctxnum)) &
 				     ISPCSI2_CTX_DAT_OFST_OFST_MASK) >>
 		ISPCSI2_CTX_DAT_OFST_OFST_SHIFT;
 	selected_ctx_u->data_offset = false;
 
 	selected_ctx->ping_addr = isp_reg_readl(isp_csi2->dev,
-						OMAP3_ISP_IOMEM_CSI2A,
-						ISPCSI2_CTX_DAT_PING_ADDR(ctxnum));
+					OMAP3_ISP_IOMEM_CSI2A,
+					ISPCSI2_CTX_DAT_PING_ADDR(ctxnum)
+					);
 	selected_ctx_u->ping_addr = false;
 
 	selected_ctx->pong_addr = isp_reg_readl(isp_csi2->dev,
-						OMAP3_ISP_IOMEM_CSI2A,
-						ISPCSI2_CTX_DAT_PONG_ADDR(ctxnum));
+					OMAP3_ISP_IOMEM_CSI2A,
+					ISPCSI2_CTX_DAT_PONG_ADDR(ctxnum));
 	selected_ctx_u->pong_addr = false;
 	return 0;
 }
@@ -1367,7 +1368,7 @@ int isp_csi2_phy_config(struct isp_csi2_device *isp_csi2,
 {
 	struct isp_csi2_phy_cfg *currphy = &isp_csi2->current_cfg.phy;
 	struct isp_csi2_phy_cfg_update *currphy_u =
-						&isp_csi2->current_cfg_update.phy;
+					&isp_csi2->current_cfg_update.phy;
 
 	if ((desiredphyconfig->tclk_term > 0x7f) ||
 				(desiredphyconfig->tclk_miss > 0x3)) {
@@ -1424,7 +1425,7 @@ int isp_csi2_calc_phy_cfg0(struct isp_csi2_device *isp_csi2,
 {
 	struct isp_csi2_phy_cfg *currphy = &isp_csi2->current_cfg.phy;
 	struct isp_csi2_phy_cfg_update *currphy_u =
-						&isp_csi2->current_cfg_update.phy;
+					&isp_csi2->current_cfg_update.phy;
 	u32 tmp, ddrclk = mipiclk >> 1;
 
 	/* Calculate THS_TERM */
@@ -1778,7 +1779,7 @@ int isp_csi2_timings_get(struct isp_csi2_device *isp_csi2, u8 io)
 	currtimings_u->stop_state_4x = false;
 
 	currtimings->stop_state_counter = (reg &
-					   ISPCSI2_TIMING_STOP_STATE_COUNTER_IO_MASK(io)) >>
+		ISPCSI2_TIMING_STOP_STATE_COUNTER_IO_MASK(io)) >>
 		ISPCSI2_TIMING_STOP_STATE_COUNTER_IO_SHIFT(io);
 	currtimings_u->stop_state_counter = false;
 	isp_csi2->update_timing = false;
@@ -2376,7 +2377,8 @@ int __init isp_csi2_init(struct device *dev)
 	isp_csi2->update_ctrl = false;
 
 	memset(&isp_csi2->current_cfg, 0, sizeof(isp_csi2->current_cfg));
-	memset(&isp_csi2->current_cfg_update, 0, sizeof(isp_csi2->current_cfg_update));
+	memset(&isp_csi2->current_cfg_update, 0,
+		sizeof(isp_csi2->current_cfg_update));
 #ifdef CONFIG_VIDEO_OMAP34XX_ISP_DEBUG_FS
 	ispcsi2_dfs_setup(isp);
 #endif

@@ -6,8 +6,8 @@
  * Copyright (C) 2008 Texas Instruments, Inc.
  *
  * Contributors:
- * 	Leonides Martinez <leonides.martinez@ti.com>
- * 	Sergio Aguirre <saaguirre@ti.com>
+ *	Leonides Martinez <leonides.martinez@ti.com>
+ *	Sergio Aguirre <saaguirre@ti.com>
  *
  * This package is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -769,8 +769,8 @@ static int previewer_open(struct inode *inode, struct file *filp)
 	if (mutex_lock_interruptible(&device->prevwrap_mutex))
 		return -EINTR;
 
-	if (device->opened /*|| (filp->f_flags & O_NONBLOCK)*/) {
-		dev_err(prev_dev, "%s: Device is already opened (%d)\n", __func__,device->opened);
+	if (device->opened || (filp->f_flags & O_NONBLOCK)) {
+		dev_err(prev_dev, "%s: Device is already opened\n", __func__);
 		ret = -EBUSY;
 		goto err_open_fh;
 	}
@@ -807,12 +807,12 @@ static int previewer_open(struct inode *inode, struct file *filp)
 	videobuf_queue_sg_init(&fh->inout_vbq, &device->vbq_ops, NULL,
 			&device->inout_vbq_lock, fh->inout_type,
 			V4L2_FIELD_NONE,
-			sizeof(struct videobuf_buffer), fh);
+			sizeof(struct videobuf_buffer), fh, NULL);
 
 	videobuf_queue_sg_init(&fh->lsc_vbq, &device->vbq_ops, NULL,
 			&device->lsc_vbq_lock, fh->lsc_type,
 			V4L2_FIELD_NONE,
-			sizeof(struct videobuf_buffer), fh);
+			sizeof(struct videobuf_buffer), fh, NULL);
 
 	init_completion(&device->wfc);
 	device->configured = false;
@@ -1022,8 +1022,8 @@ static int prev_get_params(struct prev_params __user *usr_params,
  * -EFAULT if copy_from_user() or copy_to_user() fails, -EINVAL if parameter
  * validation fails or parameter structure is not present
  **/
-static int previewer_ioctl(struct inode *inode, struct file *file,
-				unsigned int cmd, unsigned long arg)
+static int previewer_ioctl(struct file *file, unsigned int cmd,
+					      unsigned long arg)
 {
 	int ret = 0;
 	struct prev_params params;
@@ -1219,7 +1219,7 @@ static int previewer_ioctl(struct inode *inode, struct file *file,
 
 		strcpy(v4l2_cap.driver, "omap3wrapper");
 		strcpy(v4l2_cap.card, "omap3wrapper/previewer");
-		v4l2_cap.version	= 1.0;;
+		v4l2_cap.version	= 1.0;
 		v4l2_cap.capabilities	= V4L2_CAP_VIDEO_CAPTURE |
 					  V4L2_CAP_READWRITE;
 
@@ -1257,7 +1257,7 @@ static const struct file_operations prev_fops = {
 	.open = previewer_open,
 	.release = previewer_release,
 	.mmap = previewer_mmap,
-	.ioctl = previewer_ioctl,
+	.unlocked_ioctl = previewer_ioctl,
 };
 
 static struct platform_device omap_previewer_device = {

@@ -1,3 +1,4 @@
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.07.26] - CAM : from black froyo
 /*
  * drivers/media/video/yacd5b1s.c
  *
@@ -1015,6 +1016,7 @@ static int ioctl_s_ctrl(struct v4l2_int_device *s,
 	int retval = -EINVAL;
 	int i;
 	struct vcontrol *lvc;
+	//printk(KERN_DEBUG "[yacd5b1s] ioctl_s_ctrl(id: %d, value: %d)\n", vc->id, vc->value);
 
 	i = find_vctrl(vc->id);
 	if (i < 0)
@@ -1432,7 +1434,7 @@ static int ioctl_s_power(struct v4l2_int_device *s, enum v4l2_power on)
 	struct vcontrol *lvc;
 	int i;
 
-//	printk(KERN_DEBUG "yacd5b1s: ioctl_s_power(%d ==> %d, reset: %d)(cnt: %d)\n", current_power_state, on, sensor->reset_camera, sensor->capture_mode);
+	//printk(KERN_DEBUG "[_lkh] yacd5b1s: ioctl_s_power(%d ==> %d, reset: %d)(cnt: %d)\n", current_power_state, on, sensor->reset_camera, sensor->capture_mode);
 
 	switch (on) {
 	case V4L2_POWER_ON:
@@ -1464,11 +1466,10 @@ static int ioctl_s_power(struct v4l2_int_device *s, enum v4l2_power on)
 		}
 		break;
 	case V4L2_POWER_STANDBY:
-		if (!sensor->reset_camera)
+		if(!sensor->reset_camera)
 			yacd5b1s_power_standby(s);
 		break;
 	}
-
 	sensor->resuming = false;
 	current_power_state = on;
 	return 0;
@@ -1800,3 +1801,4 @@ module_exit(yacd5b1ssensor_cleanup);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Vasko Kalanoski vkalanoski@mm-sol.com");
 MODULE_DESCRIPTION("yacd5b1s camera sensor driver");
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.07.26] - CAM : from black froyo

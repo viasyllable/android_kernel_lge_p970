@@ -29,44 +29,151 @@
 #include <linux/mfd/twl6040-codec.h>
 #include "../staging/android/timed_output.h"
 
+/* milliseconds */
+#define TWL6040_VIB_POWER_DOWN_DELAY	5000
+
 struct vib_data {
 	struct timed_output_dev dev;
 	struct work_struct vib_work;
+	struct delayed_work power_work;
 	struct hrtimer timer;
 	spinlock_t lock;
+	struct mutex io_mutex;
+	struct mutex power_mutex;
 
 	struct twl4030_codec_vibra_data *pdata;
-	struct twl6040_codec *twl6040;
+	struct twl6040 *twl6040;
 
 	int vib_power_state;
 	int vib_state;
+	bool powered;
 };
 
-struct vib_data *misc_data;
+static struct vib_data *misc_data;
 
-static void vib_set(int on)
+static irqreturn_t twl6040_vib_irq_handler(int irq, void *data)
 {
-	struct twl6040_codec *twl6040 = misc_data->twl6040;
-	u8 reg = 0;
+	struct vib_data *misc_data = data;
+	struct twl6040 *twl6040 = misc_data->twl6040;
+	u8 intid = 0, status = 0;
+
+	intid = twl6040_reg_read(twl6040, TWL6040_REG_INTID);
+
+	if (intid & TWL6040_VIBINT) {
+		status = twl6040_reg_read(twl6040, TWL6040_REG_STATUS);
+		if (status & TWL6040_VIBLOCDET) {
+			pr_warn("Vibra left overcurrent detected\n");
+			twl6040_clear_bits(twl6040, TWL6040_REG_VIBCTLL,
+					   TWL6040_VIBENAL);
+		}
+		if (status & TWL6040_VIBROCDET) {
+			pr_warn("Vibra right overcurrent detected\n");
+			twl6040_clear_bits(twl6040, TWL6040_REG_VIBCTLR,
+					   TWL6040_VIBENAR);
+		}
+	}
+
+	return IRQ_HANDLED;
+}
+
+static void twl6040_vib_power_work(struct work_struct *work)
+{
+	mutex_lock(&misc_data->power_mutex);
+
+	if (misc_data->powered) {
+		twl6040_disable(misc_data->twl6040);
+		misc_data->powered = false;
+	}
+
+	mutex_unlock(&misc_data->power_mutex);
+}
+
+static int twl6040_vib_power(bool on)
+{
+	int ret = 0;
+
+	mutex_lock(&misc_data->power_mutex);
+
+	cancel_delayed_work_sync(&misc_data->power_work);
+
+	if (on == misc_data->powered)
+		goto out;
 
 	if (on) {
-		reg = twl6040_reg_read(twl6040, TWL6040_REG_VIBCTLL);
-		twl6040_reg_write(twl6040, TWL6040_REG_VIBCTLL,
-				  reg | TWL6040_VIBENAL | TWL6040_VIBCTRLLP);
-
-		reg = twl6040_reg_read(twl6040, TWL6040_REG_VIBCTLR);
-		twl6040_reg_write(twl6040, TWL6040_REG_VIBCTLR,
-				  reg | TWL6040_VIBENAR | TWL6040_VIBCTRLRN);
-
+		/* vibra power-up is immediate */
+		ret = twl6040_enable(misc_data->twl6040);
+		if (ret)
+			goto out;
+		misc_data->powered = true;
 	} else {
-		reg = twl6040_reg_read(twl6040, TWL6040_REG_VIBCTLL)
-			& ~TWL6040_VIBENAL;
-		twl6040_reg_write(twl6040, TWL6040_REG_VIBCTLL, reg);
-
-		reg = twl6040_reg_read(twl6040, TWL6040_REG_VIBCTLR)
-			& ~TWL6040_VIBENAR;
-		twl6040_reg_write(twl6040, TWL6040_REG_VIBCTLR, reg);
+		/* vibra power-down is deferred */
+		schedule_delayed_work(&misc_data->power_work,
+			msecs_to_jiffies(TWL6040_VIB_POWER_DOWN_DELAY));
 	}
+
+out:
+	mutex_unlock(&misc_data->power_mutex);
+	return ret;
+}
+
+static void vib_set(int const new_power_state)
+{
+	struct twl6040 *twl6040 = misc_data->twl6040;
+	u8 speed = misc_data->pdata->voltage_raise_speed;
+	int ret;
+
+	mutex_lock(&misc_data->io_mutex);
+
+	/* already in requested state */
+	if (new_power_state == misc_data->vib_power_state)
+		goto out;
+
+	/**
+	 * @warning  VIBDATx registers MUST be setted BEFORE VIBENAx bit
+	 *           setted in corresponding VIBCTLx registers
+	 */
+	if (new_power_state) {
+		ret = twl6040_vib_power(true);
+		if (ret)
+			goto out;
+
+		if (speed == 0x00)
+			speed = 0x32;
+
+		twl6040_reg_write(twl6040, TWL6040_REG_VIBDATL, speed);
+		twl6040_reg_write(twl6040, TWL6040_REG_VIBDATR, speed);
+
+		/*
+		 * ERRATA: Disable overcurrent protection for at least
+		 * 2.5ms when enabling vibrator drivers to avoid false
+		 * overcurrent detection
+		 */
+		twl6040_set_bits(twl6040, TWL6040_REG_VIBCTLL,
+				 TWL6040_VIBENAL | TWL6040_VIBCTRLLP);
+		twl6040_set_bits(twl6040, TWL6040_REG_VIBCTLR,
+				 TWL6040_VIBENAR | TWL6040_VIBCTRLRP);
+
+		mdelay(4);
+
+		twl6040_clear_bits(twl6040, TWL6040_REG_VIBCTLL,
+				 TWL6040_VIBCTRLLP);
+		twl6040_clear_bits(twl6040, TWL6040_REG_VIBCTLR,
+				 TWL6040_VIBCTRLRP);
+	} else {
+		twl6040_reg_write(twl6040, TWL6040_REG_VIBDATL, 0x00);
+		twl6040_reg_write(twl6040, TWL6040_REG_VIBDATR, 0x00);
+
+		twl6040_clear_bits(twl6040, TWL6040_REG_VIBCTLL,
+				   TWL6040_VIBENAL);
+		twl6040_clear_bits(twl6040, TWL6040_REG_VIBCTLR,
+				   TWL6040_VIBENAR);
+
+		twl6040_vib_power(false);
+	}
+	misc_data->vib_power_state = new_power_state;
+
+out:
+	mutex_unlock(&misc_data->io_mutex);
 }
 
 static void vib_update(struct work_struct *work)
@@ -106,9 +213,6 @@ static void vib_enable(struct timed_output_dev *dev, int value)
 		return;
 	}
 
-	twl6040_reg_write(data->twl6040, TWL6040_REG_VIBDATL, 0x32);
-	twl6040_reg_write(data->twl6040, TWL6040_REG_VIBDATR, 0x32);
-
 	spin_lock_irqsave(&data->lock, flags);
 	hrtimer_cancel(&data->timer);
 
@@ -117,6 +221,11 @@ static void vib_enable(struct timed_output_dev *dev, int value)
 	else {
 		value = (value > data->pdata->max_timeout ?
 				 data->pdata->max_timeout : value);
+
+		/* add hardware power-up time to requested timeout */
+		if (!misc_data->powered)
+			value += TWL6040_POWER_UP_TIME;
+
 		data->vib_state = 1;
 		hrtimer_start(&data->timer,
 			      ktime_set(value / 1000, (value % 1000) * 1000000),
@@ -140,29 +249,18 @@ void vibrator_haptic_fire(int value)
 #if CONFIG_PM
 static int vib_suspend(struct device *dev)
 {
-	struct vib_data *data = dev_get_drvdata(dev);
-
-	twl6040_disable(data->twl6040);
-
-	return 0;
-}
-
-static int vib_resume(struct device *dev)
-{
-	struct vib_data *data = dev_get_drvdata(dev);
-
-	twl6040_enable(data->twl6040);
+	hrtimer_cancel(&misc_data->timer);
+	vib_set(0);
+	flush_delayed_work_sync(&misc_data->power_work);
 
 	return 0;
 }
 #else
 #define vib_suspend NULL
-#define vib_resume  NULL
 #endif
 
 static const struct dev_pm_ops vib_pm_ops = {
 	.suspend = vib_suspend,
-	.resume = vib_resume,
 };
 
 static int vib_probe(struct platform_device *pdev)
@@ -186,6 +284,7 @@ static int vib_probe(struct platform_device *pdev)
 	data->twl6040 = dev_get_drvdata(pdev->dev.parent);
 
 	INIT_WORK(&data->vib_work, vib_update);
+	INIT_DELAYED_WORK(&data->power_work, twl6040_vib_power_work);
 
 	hrtimer_init(&data->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 
@@ -207,7 +306,17 @@ static int vib_probe(struct platform_device *pdev)
 	misc_data = data;
 	platform_set_drvdata(pdev, data);
 
-	twl6040_enable(data->twl6040);
+	mutex_init(&misc_data->io_mutex);
+	mutex_init(&misc_data->power_mutex);
+
+	ret = twl6040_request_irq(data->twl6040, TWL6040_IRQ_VIB,
+				twl6040_vib_irq_handler, 0,
+				"twl6040_irq_vib", data);
+	if (ret) {
+		pr_err("%s: VIB IRQ request failed: %d\n", __func__, ret);
+		goto err2;
+	}
+
 	vib_enable(&data->dev, data->pdata->initial_vibrate);
 
 	return 0;
@@ -227,8 +336,10 @@ static int vib_remove(struct platform_device *pdev)
 	if (data->pdata->exit)
 		data->pdata->exit();
 
-	twl6040_disable(data->twl6040);
-
+	hrtimer_cancel(&data->timer);
+	vib_set(0);
+	flush_delayed_work_sync(&data->power_work);
+	twl6040_free_irq(data->twl6040, TWL6040_IRQ_VIB, data);
 	timed_output_dev_unregister(&data->dev);
 	kfree(data);
 

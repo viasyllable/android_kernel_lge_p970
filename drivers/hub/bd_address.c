@@ -50,7 +50,7 @@ static ssize_t bd_address_show(struct device *dev,struct device_attribute *attr,
                   mBDAddr[9], mBDAddr[10], mBDAddr[11]);
   //return sprintf(buf, "%s\n", mBDAddr);
 }
-static DEVICE_ATTR(bdaddr_if, 0666, bd_address_show, bd_address_store);
+static DEVICE_ATTR(bdaddr_if, 0664, bd_address_show, bd_address_store);
 
 
 /** @brief  It doesn't do anything. Just a stub.

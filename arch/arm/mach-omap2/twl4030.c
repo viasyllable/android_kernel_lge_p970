@@ -11,24 +11,6 @@
 
 #include "twl4030.h"
 
-#if 0
-static struct prm_setup_vc twl4030_voltsetup_time = {
-	/* VOLT SETUPTIME for RET */
-	.ret = {
-		.voltsetup1_vdd1 = 0x005B,
-		.voltsetup1_vdd2 = 0x0055,
-		.voltsetup2 = 0x0,
-		.voltoffset = 0x0,
-	},
-	/* VOLT SETUPTIME for OFF */
-	.off = {
-		.voltsetup1_vdd1 = 0x00B3,
-		.voltsetup1_vdd2 = 0x00A0,
-		.voltsetup2 = 0x118,
-		.voltoffset = 0x32,
-	},
-};
-#endif
 
 /*
  * Sequence to control the TRITON Power resources,
@@ -98,8 +80,9 @@ static struct twl4030_ins wrst_seq[] __initdata = {
  * Reset RC.
  * Reenable twl4030.
  */
+	{MSG_SINGULAR(DEV_GRP_NULL, RES_NRES_PWRON, RES_STATE_OFF), 2}, 	/* kibum.lee@lge.com M4 supplemental patch, No Recovery From Warm Reset While In Off Mode */
 	{MSG_SINGULAR(DEV_GRP_NULL, RES_RESET, RES_STATE_OFF), 2},
-	{MSG_SINGULAR(DEV_GRP_NULL, RES_Main_Ref, RES_STATE_WRST), 2},
+	{MSG_SINGULAR(DEV_GRP_NULL, RES_MAIN_REF, RES_STATE_WRST), 2},
 	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_ALL, RES_TYPE_R0, RES_TYPE2_R2,
 							RES_STATE_WRST), 2},
 	{MSG_SINGULAR(DEV_GRP_NULL, RES_VUSB_3V1, RES_STATE_WRST), 2},
@@ -108,6 +91,7 @@ static struct twl4030_ins wrst_seq[] __initdata = {
 	{MSG_BROADCAST(DEV_GRP_NULL, RES_GRP_RC, RES_TYPE_ALL, RES_TYPE2_R0,
 							RES_STATE_WRST), 2},
 	{MSG_SINGULAR(DEV_GRP_NULL, RES_RESET, RES_STATE_ACTIVE), 2},
+	{MSG_SINGULAR(DEV_GRP_NULL, RES_NRES_PWRON, RES_STATE_ACTIVE), 2}, 	/* kibum.lee@lge.com M4 supplemental patch, No Recovery From Warm Reset While In Off Mode */
 };
 
 static struct twl4030_script wrst_script __initdata = {
@@ -158,7 +142,9 @@ static struct twl4030_power_data twl4030_generic_script __initdata = {
 	.resource_config = twl4030_rconfig,
 };
 
-void twl4030_get_scripts(struct twl4030_power_data *t2scripts_data)
+// [kibum.lee@lge.com] Section mismatch WARNING fix
+//void twl4030_get_scripts(struct twl4030_power_data *t2scripts_data)
+void __init twl4030_get_scripts(struct twl4030_power_data *t2scripts_data)
 {
 	t2scripts_data->scripts = twl4030_generic_script.scripts;
 	t2scripts_data->num = twl4030_generic_script.num;
@@ -166,25 +152,4 @@ void twl4030_get_scripts(struct twl4030_power_data *t2scripts_data)
 			twl4030_generic_script.resource_config;
 }
 
-#if 0
-void twl4030_get_vc_timings(struct prm_setup_vc *setup_vc)
-{
-	/* copies new voltsetup time for RERT */
-	setup_vc->ret.voltsetup1_vdd1 =
-				twl4030_voltsetup_time.ret.voltsetup1_vdd1;
-	setup_vc->ret.voltsetup1_vdd2 =
-				twl4030_voltsetup_time.ret.voltsetup1_vdd2;
-	setup_vc->ret.voltsetup2 = twl4030_voltsetup_time.ret.voltsetup2;
-	setup_vc->ret.voltoffset = twl4030_voltsetup_time.ret.voltoffset;
-
-	/* copies new voltsetup time for OFF */
-	setup_vc->off.voltsetup1_vdd1 =
-				twl4030_voltsetup_time.off.voltsetup1_vdd1;
-	setup_vc->off.voltsetup1_vdd2 =
-				twl4030_voltsetup_time.off.voltsetup1_vdd2;
-	setup_vc->off.voltsetup2 = twl4030_voltsetup_time.off.voltsetup2;
-	setup_vc->off.voltoffset = twl4030_voltsetup_time.off.voltoffset;
-
-}
-#endif
 #endif

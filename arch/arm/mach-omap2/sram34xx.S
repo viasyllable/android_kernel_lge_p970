@@ -32,7 +32,13 @@
 #include <mach/io.h>
 
 #include "sdrc.h"
-#include "cm.h"
+#include "cm2xxx_3xxx.h"
+
+/*
+ * This file needs be built unconditionally as ARM to interoperate correctly
+ * with non-Thumb-2-capable firmware.
+ */
+	.arm
 
 	.text
 
@@ -67,6 +73,14 @@
 
 /* CM_CLKSEL1_PLL bit settings */
 #define CORE_DPLL_CLKOUT_DIV_SHIFT	0x1b
+
+/* DSS registers */
+#define OMAP34XX_DISPC_BASE	0x48050400
+#define DISPC_CONTROL		OMAP2_L4_IO_ADDRESS(OMAP34XX_DISPC_BASE + 0x040)
+#define DISPC_IRQSTATUS		OMAP2_L4_IO_ADDRESS(OMAP34XX_DISPC_BASE + 0x018)
+#define DISPC_LCD_EN		(1 << 0)
+#define DISPC_VSYNC_ST		(1 << 0) // LGE_CHANGE [daewung.kim@lge.com] Change VSYNC_ST -> FRAME_DONE
+#define CM_DSS_FCLK_ST		(1 << 0)
 
 /*
  * omap3_sram_configure_core_dpll - change DPLL3 M2 divider
@@ -104,33 +118,78 @@
  * touching the SDRAM.  Until that time, users who know that their use case
  * can satisfy the above requirement can enable the CONFIG_OMAP3_SDRC_AC_TIMING
  * option.
+ *
+ * Richard Woodruff notes that any changes to this code must be carefully
+ * audited and tested to ensure that they don't cause a TLB miss while
+ * the SDRAM is inaccessible.  Such a situation will crash the system
+ * since it will cause the ARM MMU to attempt to walk the page tables.
+ * These crashes may be intermittent.
  */
+	.align	3
 ENTRY(omap3_sram_configure_core_dpll)
 	stmfd	sp!, {r1-r12, lr}	@ store regs to stack
 
 					@ pull the extra args off the stack
 					@  and store them in SRAM
+
+/*
+ * PC-relative stores are deprecated in ARMv7 and lead to undefined behaviour
+ * in Thumb-2: use a r7 as a base instead.
+ * Be careful not to clobber r7 when maintaing this file.
+ */
+ THUMB(	adr	r7, omap3_sram_configure_core_dpll			)
+	.macro strtext Rt:req, label:req
+ ARM(	str	\Rt, \label						)
+ THUMB(	str	\Rt, [r7, \label - omap3_sram_configure_core_dpll]	)
+	.endm
+
 	ldr	r4, [sp, #52]
-	str     r4, omap_sdrc_rfr_ctrl_0_val
+	strtext	r4, omap_sdrc_rfr_ctrl_0_val
 	ldr	r4, [sp, #56]
-	str     r4, omap_sdrc_actim_ctrl_a_0_val
+	strtext	r4, omap_sdrc_actim_ctrl_a_0_val
 	ldr	r4, [sp, #60]
-	str     r4, omap_sdrc_actim_ctrl_b_0_val
+	strtext	r4, omap_sdrc_actim_ctrl_b_0_val
 	ldr	r4, [sp, #64]
-	str     r4, omap_sdrc_mr_0_val
+	strtext	r4, omap_sdrc_mr_0_val
 	ldr	r4, [sp, #68]
-	str     r4, omap_sdrc_rfr_ctrl_1_val
+	strtext	r4, omap_sdrc_rfr_ctrl_1_val
 	cmp	r4, #0			@ if SDRC_RFR_CTRL_1 is 0,
 	beq	skip_cs1_params		@  do not use cs1 params
 	ldr	r4, [sp, #72]
-	str     r4, omap_sdrc_actim_ctrl_a_1_val
+	strtext	r4, omap_sdrc_actim_ctrl_a_1_val
 	ldr	r4, [sp, #76]
-	str     r4, omap_sdrc_actim_ctrl_b_1_val
+	strtext	r4, omap_sdrc_actim_ctrl_b_1_val
 	ldr	r4, [sp, #80]
-	str     r4, omap_sdrc_mr_1_val
+	strtext	r4, omap_sdrc_mr_1_val
 skip_cs1_params:
+	mrc	p15, 0, r8, c1, c0, 0	@ read ctrl register
+	bic	r10, r8, #0x800		@ clear Z-bit, disable branch prediction
+	mcr	p15, 0, r10, c1, c0, 0	@ write ctrl register
 	dsb				@ flush buffered writes to interconnect
+	isb				@ prevent speculative exec past here
 
+	ldr	r11, omap3_cm_fclk_dss
+	ldr	r12, [r11]
+	and	r12, r12, #CM_DSS_FCLK_ST
+	cmp	r12, #CM_DSS_FCLK_ST	@ check if dss fclk is active
+	blne	configure_dpll
+	ldr	r11, omap3_dispc_ctrl
+	ldr	r12, [r11]
+	and	r12, r12, #DISPC_LCD_EN
+	cmp	r12, #DISPC_LCD_EN	@ check if lcd is enabled
+	blne	configure_dpll
+	ldr	r11, omap3_dispc_irq_st
+	ldr	r12, [r11]
+	and	r12, r12, #DISPC_VSYNC_ST	@ clear vsync
+	str	r12, [r11]
+wait_vsync_set:
+	ldr	r12, [r11]
+	and	r12, r12, #DISPC_VSYNC_ST
+	cmp	r12, #DISPC_VSYNC_ST
+#if 0	/*[LGE_CHANGE] pyocool.cho@lge.com power on off lockup issue */
+	blne	wait_vsync_set		@ wait for vsync to be set.
+#endif
+configure_dpll:
 	cmp	r3, #1			@ if increasing SDRC clk rate,
 	bleq	configure_sdrc		@ program the SDRC regs early (for RFR)
 	cmp	r1, #SDRC_UNLOCK_DLL	@ set the intended DLL state
@@ -148,6 +207,7 @@ skip_cs1_params:
 	beq	return_to_sdram		@ return to SDRAM code, otherwise,
 	bl	configure_sdrc		@ reprogram SDRC regs now
 return_to_sdram:
+	mcr	p15, 0, r8, c1, c0, 0	@ restore ctrl register
 	isb				@ prevent speculative exec past here
 	mov 	r0, #0 			@ return value
 	ldmfd	sp!, {r1-r12, pc}	@ restore regs and return
@@ -261,6 +321,7 @@ skip_cs1_prog:
 	ldr	r12, [r11]		@ posted-write barrier for SDRC
 	bx	lr
 
+	.align
 omap3_sdrc_power:
 	.word OMAP34XX_SDRC_REGADDR(SDRC_POWER)
 omap3_cm_clksel1_pll:
@@ -309,6 +370,13 @@ omap3_sdrc_dlla_ctrl:
 	.word OMAP34XX_SDRC_REGADDR(SDRC_DLLA_CTRL)
 core_m2_mask_val:
 	.word 0x07FFFFFF
+ENDPROC(omap3_sram_configure_core_dpll)
+omap3_cm_fclk_dss:
+	.word OMAP34XX_CM_REGADDR(OMAP3430_DSS_MOD, CM_FCLKEN)
+omap3_dispc_ctrl:
+	.word DISPC_CONTROL
+omap3_dispc_irq_st:
+	.word DISPC_IRQSTATUS
 
 ENTRY(omap3_sram_configure_core_dpll_sz)
 	.word	. - omap3_sram_configure_core_dpll

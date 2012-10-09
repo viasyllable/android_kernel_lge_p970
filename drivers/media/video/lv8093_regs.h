@@ -23,7 +23,7 @@
 #define LV8093_I2C_RETRY_COUNT		5
 
 #define CAMAF_LV8093_DISABLE		0x1
-#define CAMAF_LV8093_ENABLE	    	0x0
+#define CAMAF_LV8093_ENABLE		0x0
 #define CAMAF_LV8093_DRVPLS_REG		0x0
 #define CAMAF_LV8093_CTL_REG		0x1
 #define CAMAF_LV8093_RST_REG		0x2
@@ -54,7 +54,7 @@
 
 #define CAMAF_LV8093_DATA(ARG)		(((ARG) & 0xFF) << 6)
 #define CAMAF_LV8093_DATA_R(ARG)	(((ARG) >> 6) & 0xFF)
-#define CAMAF_FREQUENCY_EQ1(mclk)     	((u16)(mclk/16000))
+#define CAMAF_FREQUENCY_EQ1(mclk)	((u16)(mclk/16000))
 
 /* State of lens */
 #define LENS_DETECTED 1
@@ -65,9 +65,9 @@
 
 /* Initialization Mode Settings */
 #define LV8093_TIME_GATEA	23		/* First pulse width. */
-#define LV8093_TIME_OFF 	2		/* Off time between pulses. */
+#define LV8093_TIME_OFF		2		/* Off time between pulses. */
 #define LV8093_TIME_GATEB	29		/* Second pulse width. */
-#define LV8093_STP 			24		/* Pulse repetitions. */
+#define LV8093_STP		24		/* Pulse repetitions. */
 /* Numbers of clock periods per cycle: */
 /* 18MHz clock, period = 55.6 nsec */
 #define LV8093_CLK_PER_PERIOD	104

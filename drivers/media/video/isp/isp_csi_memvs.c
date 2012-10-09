@@ -82,7 +82,7 @@ struct isp_csi_memvs_fh {
 };
 
 /* list of image formats supported by isp_csi_memvs sensor */
-const static struct v4l2_fmtdesc isp_csi_memvs_formats[] = {
+static const struct v4l2_fmtdesc isp_csi_memvs_formats[] = {
 	{
 		.description	= "Bayer10 (GR/BG)",
 		.pixelformat	= V4L2_PIX_FMT_SGRBG10,
@@ -332,27 +332,27 @@ static struct omap34xxcam_sensor_config isp_csi_memvs_hwc = {
 
 #define ISP_DUMMY_MCLK		216000000
 static struct isp_interface_config isp_csi_memvs_if_config = {
-	.ccdc_par_ser 		= ISP_CSIB,
-	.dataline_shift 	= 0x0,
-	.hsvs_syncdetect 	= ISPCTRL_SYNC_DETECT_VSRISE,
-	.strobe 		= 0x0,
-	.prestrobe 		= 0x0,
-	.shutter 		= 0x0,
-	.wenlog 		= ISPCCDC_CFG_WENLOG_AND,
+	.ccdc_par_ser		= ISP_CSIB,
+	.dataline_shift		= 0x0,
+	.hsvs_syncdetect	= ISPCTRL_SYNC_DETECT_VSRISE,
+	.strobe			= 0x0,
+	.prestrobe		= 0x0,
+	.shutter		= 0x0,
+	.wenlog			= ISPCCDC_CFG_WENLOG_AND,
 	.wait_hs_vs		= 0,
 	.cam_mclk		= ISP_DUMMY_MCLK,
 	.u.csi.use_mem_read	= 0x1,
-	.u.csi.crc 		= 0x0,
-	.u.csi.mode 		= 0x0,
-	.u.csi.edge 		= 0x0,
-	.u.csi.signalling 	= 0x0,
-	.u.csi.strobe_clock_inv = 0x0,
-	.u.csi.vs_edge 		= 0x0,
-	.u.csi.channel 		= 0x0,
-	.u.csi.vpclk 		= 0x1,
-	.u.csi.data_start 	= 0x0,
-	.u.csi.data_size 	= 0x0,
-	.u.csi.format 		= V4L2_PIX_FMT_SGRBG10,
+	.u.csi.crc		= 0x0,
+	.u.csi.mode		= 0x0,
+	.u.csi.edge		= 0x0,
+	.u.csi.signalling	= 0x0,
+	.u.csi.strobe_clock_inv	= 0x0,
+	.u.csi.vs_edge		= 0x0,
+	.u.csi.channel		= 0x0,
+	.u.csi.vpclk		= 0x1,
+	.u.csi.data_start	= 0x0,
+	.u.csi.data_size	= 0x0,
+	.u.csi.format		= V4L2_PIX_FMT_SGRBG10,
 };
 
 /**
@@ -678,7 +678,7 @@ static int vidioc_streamon(struct file *file, void *fh, enum v4l2_buf_type i)
 {
 	struct isp_csi_memvs_fh *ofh = fh;
 
-	return videobuf_streamon(&ofh->vbq);;
+	return videobuf_streamon(&ofh->vbq);
 }
 
 static int vidioc_streamoff(struct file *file, void *fh, enum v4l2_buf_type i)
@@ -696,7 +696,8 @@ static int vidioc_streamoff(struct file *file, void *fh, enum v4l2_buf_type i)
  * @arg: ioctl arg value
  *
  */
-static long vidioc_default(struct file *file, void *_fh, int cmd, void *arg)
+static long vidioc_default(struct file *file, void *_fh,
+			   bool valid_prio, int cmd, void *arg)
 {
 	struct isp_csi_memvs_sensor *sensor = video_drvdata(file);
 	struct v4l2_int_device *vdev = sensor->v4l2_int_device;
@@ -745,8 +746,8 @@ out:
 
 
 static const struct v4l2_ioctl_ops isp_csi_memvs_vout_ioctl_ops = {
-	.vidioc_querycap      			= vidioc_querycap,
-	.vidioc_enum_fmt_vid_out 		= vidioc_enum_fmt_vid_out,
+	.vidioc_querycap			= vidioc_querycap,
+	.vidioc_enum_fmt_vid_out		= vidioc_enum_fmt_vid_out,
 	.vidioc_g_fmt_vid_out			= vidioc_g_fmt_vid_out,
 	.vidioc_try_fmt_vid_out			= vidioc_try_fmt_vid_out,
 	.vidioc_s_fmt_vid_out			= vidioc_s_fmt_vid_out,
@@ -977,10 +978,9 @@ static int isp_csi_memvs_vout_open(struct file *file)
 	spin_lock_init(&ofh->vbq_lock);
 
 	videobuf_queue_sg_init(&ofh->vbq, &isp_csi_memvs_vout_vbq_ops, NULL,
-			       &ofh->vbq_lock, V4L2_BUF_TYPE_VIDEO_OUTPUT,
-			       V4L2_FIELD_NONE, sizeof(struct videobuf_buffer),
-			       ofh);
-
+				&ofh->vbq_lock, V4L2_BUF_TYPE_VIDEO_OUTPUT,
+				V4L2_FIELD_NONE, sizeof(struct videobuf_buffer),
+				ofh, NULL);
 	sensor->opened = true;
 
 	mutex_unlock(&sensor->mutex);
@@ -1008,6 +1008,11 @@ static int isp_csi_memvs_vout_release(struct file *file)
 	}
 	mutex_unlock(&sensor->mutex);
 
+	// (+) ymjun [0719] : memleak patch from GB
+	if (&ofh->vbq)
+		videobuf_mmap_free(&ofh->vbq);
+	// (-)  ymjun [0719] : memleak patch from GB
+
 	kfree(ofh);
 
 	sensor->opened = false;
@@ -1019,10 +1024,10 @@ static int isp_csi_memvs_vout_release(struct file *file)
 }
 
 static const struct v4l2_file_operations isp_csi_memvs_vout_fops = {
-	.owner 		= THIS_MODULE,
+	.owner		= THIS_MODULE,
 	.unlocked_ioctl	= video_ioctl2,
-	.open 		= isp_csi_memvs_vout_open,
-	.release 	= isp_csi_memvs_vout_release,
+	.open		= isp_csi_memvs_vout_open,
+	.release	= isp_csi_memvs_vout_release,
 };
 
 /**

@@ -4,7 +4,7 @@
  * Copyright (C) 2009 Texas Instruments.
  *
  * Contributors:
- * 	Sergio Aguirre <saaguirre@ti.com>
+ *	Sergio Aguirre <saaguirre@ti.com>
  *
  * This package is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -40,8 +40,8 @@ struct isp_csi_interface_cfg {
  * struct isp_csi_vp_cfg - ISP CSI1/CCP2 videoport config
  * @no_ocp: Exclusively use VP (no OCP output)
  * @divider: VP frequency divider, OCPCLK/(divider + 1)
- * @write_polarity: 0 - Write data to VP on PCLK falling edge.
- * 		    1 - Write data to VP on PCLK rising edge.
+ * @write_polarity:	0 - Write data to VP on PCLK falling edge.
+ *			1 - Write data to VP on PCLK rising edge.
  */
 struct isp_csi_vp_cfg {
 	bool no_ocp;

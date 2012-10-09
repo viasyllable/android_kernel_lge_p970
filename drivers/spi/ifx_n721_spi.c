@@ -18,8 +18,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- */
-  
+ */  
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/ioctl.h>
@@ -30,7 +30,7 @@
 #include <linux/errno.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
+#include <linux/smp_lock.h>		// kibum.lee compile error // ICS
 #include <asm/uaccess.h>
 #include <linux/irq.h>
 #include <mach/gpio.h>
@@ -45,11 +45,12 @@
 //LGSI_P970_WAP_24thGBXMM_BaselineAdoption_Santosh_Start
 #include <plat/omap-pm.h>
 //LGSI_P970_WAP_24thGBXMM_BaselineAdoption_Santosh_End
-#include <linux/spi/ifx_n721_spi.h>
+#include "ifx_n721_spi.h"
 #include <linux/delay.h>	
 #define MRDY_DELAY_TIME 400     //20101127-1, syblue.lee@lge.com, Change delay time for transcation : 1000us -> 400us
+#define MODEM_CHK 177           //gpio_177 AP_SLEEP_CHK [LGE-SPI]
 
-#define CONFIG_SPI_DEBUG
+//#define CONFIG_SPI_DEBUG
 #undef CONFIG_SPI_DEBUG
 
 void dump_atcmd_simple(char *txt, char *data, int len) 
@@ -155,27 +156,23 @@ void dump_atcmd(char *data)
 	SPI_DEBUG_PRINT("\n");
 }
 
-
-
-#define MODEM_CHK 177 //gpio_177 AP_SLEEP_CHK [LGE-SPI]
 /* ################################################################################################################ */
 
 /* Structure used to store private data */
 struct ifx_spi_data {
-	dev_t			devt;
-	spinlock_t		spi_lock;
-	struct spi_device	*spi;
-	struct list_head	device_entry;
-        struct completion       ifx_read_write_completion;
-        struct tty_struct       *ifx_tty;
+	dev_t			        devt;
+	spinlock_t		        spi_lock;
+	struct spi_device	    *spi;
+	struct list_head	    device_entry;
+    struct completion       ifx_read_write_completion;
+    struct tty_struct       *ifx_tty;
 
 	/* buffer is NULL unless this device is open (users > 0) */
-//	struct mutex		buf_lock;
+
 	unsigned int		users;
-//	unsigned int		throttle;
 	struct work_struct      ifx_work;
 	struct workqueue_struct *ifx_wq;
-	unsigned char wq_name[20];
+	unsigned char       wq_name[20];
 
 	unsigned int		ifx_master_initiated_transfer;
 	unsigned int		ifx_spi_count;
@@ -184,13 +181,13 @@ struct ifx_spi_data {
 	unsigned int		ifx_current_frame_size;
 	unsigned int		ifx_valid_frame_size;
 	unsigned int		ifx_ret_count;
-	const unsigned char 	*ifx_spi_buf;
+	const unsigned char *ifx_spi_buf;
 	unsigned char		*ifx_tx_buffer;
-	unsigned char           *ifx_rx_buffer;
-	unsigned		mrdy_gpio;
-	unsigned		srdy_gpio;
-	unsigned int wcount;
-	int ifx_spi_lock;
+	unsigned char       *ifx_rx_buffer;
+	unsigned		    mrdy_gpio;
+	unsigned		    srdy_gpio;
+	unsigned int        wcount;
+	int                 ifx_spi_lock;
 };
 
 union ifx_spi_frame_header{
@@ -227,10 +224,6 @@ static void ifx_spi_buffer_initialization(struct ifx_spi_data *spi_data);
 static unsigned int ifx_spi_sync_read_write(struct ifx_spi_data *spi_data, unsigned int len);
 static irqreturn_t ifx_spi_handle_srdy_irq(int irq, void *handle);
 static void ifx_spi_handle_work(struct work_struct *work);
-
-// hgahn
-unsigned char rx_dummy[]={0xff,0xff,0xff,0xff};
-
 
 /* ################################################################################################################ */
 
@@ -299,9 +292,9 @@ ifx_spi_close(struct tty_struct *tty, struct file *filp)
  * and this function returns number of bytes sent to MODEM
  */
 
-//#define LGE_DUMP_SPI_BIFFUER   // woojun.ye: disable SPI log printk.
-#ifdef LGE_DUMP_SPI_BIFFUER
-#define COL_SIZE 20	// Merged by jisil 50 -> 20
+//#define LGE_DUMP_SPI_BUFFER   // woojun.ye: disable SPI log printk.
+#ifdef LGE_DUMP_SPI_BUFFER
+#define COL_SIZE 20	
 static void dump_spi_buffer(const unsigned char *txt, const unsigned char *buf, int count)
 {
     char dump_buf_str[COL_SIZE+1];
@@ -311,7 +304,7 @@ static void dump_spi_buffer(const unsigned char *txt, const unsigned char *buf, 
         int j = 0;
         char *cur_str = dump_buf_str;
         unsigned char ch;
-        while((j < COL_SIZE) && (j  < COL_SIZE/* count */))	// Merged by jisil
+        while((j < COL_SIZE) && (j  < COL_SIZE/* count */))	
         {
             ch = buf[j];
             if ((ch < 32) || (ch > 126))
@@ -325,15 +318,15 @@ static void dump_spi_buffer(const unsigned char *txt, const unsigned char *buf, 
             j++;
         }
         *cur_str = 0;
-//#ifdef CONFIG_SPI_DEBUG	                     
+	
         printk("%s:count:%d [%s]\n", txt, count, dump_buf_str);                        
-//#endif
+
     }
     else
     {
-//#ifdef CONIFG_SPI_DEBUG               
+
         printk("%s: buffer is NULL\n", txt);                 
-//#endif
+
     }
 }
 #else
@@ -349,7 +342,7 @@ ifx_spi_write(struct tty_struct *tty, const unsigned char *buf, int count)
 
 	spi_data->ifx_ret_count = 0;
 
-#ifdef LGE_DUMP_SPI_BIFFUER
+#ifdef LGE_DUMP_SPI_BUFFER
     dump_spi_buffer("ifx_spi_write()", buf, count);
 #endif
 
@@ -374,32 +367,32 @@ ifx_spi_write(struct tty_struct *tty, const unsigned char *buf, int count)
 	spi_data->ifx_spi_buf  = buf;
 	spi_data->ifx_spi_count  = count;
 
-
-
 #ifdef CONFIG_LGE_SPI_MODE_SLAVE
 	queue_work(spi_data->ifx_wq, &spi_data->ifx_work);    
 #else
 	ifx_spi_set_mrdy_signal(spi_data, 1);  
 #endif
-//	SPI_DEBUG_PRINT("%s : ", __FUNCTION__);
 //	dump_atcmd(buf+2) ; 	
 
 // LGE_UPDATE_S eungbo.shim@lge.com 20110111 -- SPI RETRY 
-#if 0
-	//wait_for_completion(&spi_data->ifx_read_write_completion);
-#else
+
 //LGSI_P970_WAP_24thGBXMM_BaselineAdoption_Santosh_Start
 	wait_for_completion_timeout(&spi_data->ifx_read_write_completion, 3*HZ);	
 //LGSI_P970_WAP_24thGBXMM_BaselineAdoption_Santosh_End
-#endif
+
 	if(spi_data->ifx_ret_count==0)
 	{	
-//		lge_debug[D_SPI].enable = 1;
 		ifx_spi_set_mrdy_signal(spi_data, 0);
-//#ifdef CONFIG_SPI_DEBUG
-        printk("%s - timeout!! Can't get SRDY from CP for 10sec. Set MRDY high to low\n", __FUNCTION__, __LINE__); 
+ 
+        printk("%s - timeout!! Can't get SRDY from CP for 10sec. Set MRDY high to low\n", __FUNCTION__); // 20120213 taeju.park@lge.com To delete compile warning, too many arguments for format
         dump_spi_buffer("timeout - ifx_spi_write()", buf, count);     
-//#endif
+	{
+                int pin_val;
+                pin_val = gpio_get_value(spi_data->srdy_gpio);
+		printk("SRDY SIGNAL = %d\n", pin_val);
+        }
+
+
 	}
 // LGE_UPDATE_E eungbo.shim@lge.com 20110111 -- SPI RETRY 
 	init_completion(&spi_data->ifx_read_write_completion);
@@ -415,68 +408,7 @@ static int
 ifx_spi_write_room(struct tty_struct *tty)
 {
     return IFX_SPI_MAX_BUF_SIZE;	
-//	return 2048;
 }
-
-
-/* ################################################################################################################ */
-/* These two functions are to be used in future to implement flow control (RTS & CTS)*/
-/*static void 
-ifx_spi_throttle(struct tty_struct *tty)
-{
-	unsigned int flags;
-	struct ifx_spi_data *spi_data = (struct ifx_spi_data *)tty->driver_data;
-	spi_data->ifx_tty = tty;
-	spin_lock_irqsave(&spi_data->spi_lock, flags);
-	spi_data->throttle = 1;
-	spin_unlock_irqrestore(&spi_data->spi_lock, flags);
-}
-
-static void 
-ifx_spi_unthrottle(struct tty_struct *tty)
-{
-	unsigned int flags;
-	struct ifx_spi_data *spi_data = (struct ifx_spi_data *)tty->driver_data;
-	spi_data->ifx_tty = tty;
-
-static void 
-ifx_spi_unthrottle(struct tty_struct *tty)
-{
-	unsigned int flags;
-	struct ifx_spi_data *spi_data = (struct ifx_spi_data *)tty->driver_data;
-	spi_data->ifx_tty = tty;
-static void 
-ifx_spi_unthrottle(struct tty_struct *tty)
-{
-	unsigned int flags;
-	struct ifx_spi_data *spi_data = (struct ifx_spi_data *)tty->driver_data;
-	spi_data->ifx_tty = tty;
-static void 
-ifx_spi_unthrottle(struct tty_struct *tty)
-{
-	unsigned int flags;
-	struct ifx_spi_data *spi_data = (struct ifx_spi_data *)tty->driver_data;
-	spi_data->ifx_tty = tty;
-static void 
-ifx_spi_unthrottle(struct tty_struct *tty)
-{
-	unsigned int flags;
-	struct ifx_spi_data *spi_data = (struct ifx_spi_data *)tty->driver_data;
-	spi_data->ifx_tty = tty;
-static void 
-ifx_spi_unthrottle(struct tty_struct *tty)
-{
-	unsigned int flags;
-	struct ifx_spi_data *spi_data = (struct ifx_spi_data *)tty->driver_data;
-	spi_data->ifx_tty = tty;
-	spin_lock_irqsave(&spi_data->spi_lock, flags);
-	spi_data->throttle = 0;
-	if( ifx_rx_buffer != NULL ){
-	     tty_insert_flip_string(spi_data->ifx_tty, ifx_rx_buffer, valid_buffer_count);
-	}
-	spin_unlock_irqrestore(&spi_data->spi_lock, flags);  
-}*/
-/* ################################################################################################################ */
 
 /* End of IFX SPI Operations */
 
@@ -512,6 +444,7 @@ ifx_spi_probe(struct spi_device *spi)
 	status = ifx_spi_allocate_frame_memory(spi_data, IFX_SPI_MAX_BUF_SIZE + IFX_SPI_HEADER_SIZE);
         if(status != 0){
 		printk("File: ifx_n721_spi.c\tFunction: int ifx_spi_probe\tFailed to allocate memory for buffers\n");
+		kfree(spi_data);
 		return -ENOMEM;
         }
 	
@@ -535,7 +468,8 @@ ifx_spi_probe(struct spi_device *spi)
 	spi_data->spi = spi;
 	spi->mode = SPI_MODE_1;
 	spi->bits_per_word = 8;//32; For A-Project
-	spi->slave_ready = ifx_spi_ap_ready;
+	spi->chip_select = 0 ;
+	spi->max_speed_hz = 24000000; //48000000; //to 24Mhz	
 	status = spi_setup(spi);
 
 	spi_data->ifx_spi_lock = 1;
@@ -573,7 +507,7 @@ ifx_spi_probe(struct spi_device *spi)
 
 	gpio_request(MODEM_CHK, "MODEM_CHK");
 	// 20100929 yoolje.cho@lge.com  it should be done [START_LGE]
-    	gpio_direction_output(MODEM_CHK, 1);
+    gpio_direction_output(MODEM_CHK, 1);
 	// 20100929 yoolje.cho@lge.com  [END_LGE]
 	
 	return status;
@@ -620,7 +554,7 @@ ifx_spi_resume(struct spi_device *spi)
 static struct spi_driver ifx_spi_driver = {
 	.driver = {
 		.name = "ifxn721",
-                .bus = &spi_bus_type,
+        .bus = &spi_bus_type,
 		.owner = THIS_MODULE,
 	},
 	.probe = ifx_spi_probe,
@@ -637,9 +571,6 @@ static const struct tty_operations ifx_spi_ops = {
     .close = ifx_spi_close,
     .write = ifx_spi_write,
     .write_room = ifx_spi_write_room,
-    //.throttle = ifx_spi_throttle,
-    //.unthrottle = ifx_spi_unthrottle,
-    //.set_termios = ifx_spi_set_termios,
 };
 
 /* ################################################################################################################ */
@@ -672,7 +603,7 @@ ifx_spi_allocate_frame_memory(struct ifx_spi_data *spi_data, unsigned int memory
 		status = -ENOMEM;
 	}
 	if(status == -ENOMEM){
-		if(spi_data->ifx_tx_buffer){
+		if(spi_data->ifx_tx_buffer){    
 			kfree(spi_data->ifx_tx_buffer);
 		}
 		if(spi_data->ifx_rx_buffer){
@@ -735,7 +666,7 @@ ifx_spi_get_header_info(unsigned char *rx_buffer, unsigned int *valid_buf_size)
 	for(i=3; i>=0; i--){
 		header.framesbytes[i] = rx_buffer[/*3-*/i];
 	}
-// Merged by jisil
+
  //20101127-2, syblue.lee@lge.com, Discard if mux size is bigger than MAX SIZE [START]
        if(header.ifx_spi_header.curr_data_size > IFX_SPI_MAX_BUF_SIZE)   //20101201-1, syblue.lee@lge.com, bug fix : >= -> >
        {
@@ -845,27 +776,12 @@ ifx_spi_send_and_receive_data(struct ifx_spi_data *spi_data)
 //	dump_atcmd(spi_data->ifx_tx_buffer+IFX_SPI_HEADER_SIZE+2) ; 	
 #endif
 
-#ifdef SPI_TEST
-	{
-		int i;
-		for(i=0;i<2048; i++)
-		{
-//			if(spi_data->ifx_rx_buffer[i] != (i%256)){
-			if(spi_data->ifx_rx_buffer[i] != 0xAC){
-				printk(KERN_EMERG "rxbuf data error:[%d] %d\n", i, spi_data->ifx_rx_buffer[i]);
-				break;
-			}
-		}
-	}
-#endif
-
 	if(status > 0)
 	{
 		memset(spi_data->ifx_tx_buffer,0,IFX_SPI_MAX_BUF_SIZE+IFX_SPI_HEADER_SIZE);
 		spi_data->ifx_ret_count += spi_data->ifx_valid_frame_size;
 	}
     
-#if 1
 	if(*((int*)spi_data->ifx_rx_buffer) == 0xFFFFFFFF)
 	{
 		spi_data->ifx_receiver_buf_size = 0;
@@ -874,30 +790,19 @@ ifx_spi_send_and_receive_data(struct ifx_spi_data *spi_data)
 #endif
 		return;
 	}
-#endif
-	/* Handling Received data */
-#ifdef SPI_TEST
-#else
-	spi_data->ifx_receiver_buf_size = ifx_spi_get_header_info(spi_data->ifx_rx_buffer, &rx_valid_buf_size);
-#endif
 
-//	if((spi_data->throttle == 0) && (rx_valid_buf_size != 0) && !(spi_data->ifx_spi_lock)){
-#ifdef SPI_TEST
-#else
+	/* Handling Received data */
+	spi_data->ifx_receiver_buf_size = ifx_spi_get_header_info(spi_data->ifx_rx_buffer, &rx_valid_buf_size);
+
 	if((spi_data->users > 0) && (rx_valid_buf_size != 0))
-#endif
 	{
-#ifdef LGE_DUMP_SPI_BIFFUER
+#ifdef LGE_DUMP_SPI_BUFFER
     dump_spi_buffer("ifx_spi_send_and_receive_data()[Recev]", &(spi_data->ifx_rx_buffer[4]), rx_valid_buf_size);
 #endif
 
-#ifdef SPI_TEST
-		tty_insert_flip_string(spi_data->ifx_tty, spi_data->ifx_rx_buffer, 2048);
-#else
-		SPI_DEBUG_PRINT("SPI RX : ");
 //		dump_atcmd(spi_data->ifx_rx_buffer+IFX_SPI_HEADER_SIZE+2) ;		
 		tty_insert_flip_string(spi_data->ifx_tty, spi_data->ifx_rx_buffer+IFX_SPI_HEADER_SIZE, rx_valid_buf_size);
-#endif
+
 		tty_flip_buffer_push(spi_data->ifx_tty);
 	}  
 	/*else
@@ -918,7 +823,7 @@ ifx_spi_sync_read_write(struct ifx_spi_data *spi_data, unsigned int len)
 	struct spi_message	m;
 	struct spi_transfer	t = {
 						.tx_buf		= spi_data->ifx_tx_buffer,
-                        		.rx_buf		= spi_data->ifx_rx_buffer,
+                        .rx_buf		= spi_data->ifx_rx_buffer,
 						.len		= len,
 					};
 	spi_message_init(&m);
@@ -950,11 +855,16 @@ ifx_spi_handle_srdy_irq(int irq, void *handle)
 {
 	struct ifx_spi_data *spi_data = (struct ifx_spi_data *)handle;
 #ifdef CONFIG_SPI_DEBUG		
-//	printk("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< CP ISR\n");
+	printk("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< CP ISR\n");
 #endif
+	{
+		int pin_val;
+		pin_val = gpio_get_value(spi_data->srdy_gpio);
+		if(pin_val == 0){
+			return IRQ_HANDLED;
+		}
+	}
 	queue_work(spi_data->ifx_wq, &spi_data->ifx_work);    
-
-	//SPI_DEBUG_PRINT("%s-%d\n",__FUNCTION__, __LINE__);
 
 	return IRQ_HANDLED; 
 }
@@ -969,11 +879,12 @@ ifx_spi_handle_work(struct work_struct *work)
 
 	if (!spi_data->ifx_master_initiated_transfer)
 	{
+//		printk("<<<<<<<<<<<<<<<< CP [S] \n");
 #ifdef CONFIG_SPI_DEBUG
 		printk("<<<<<<<<<<<<<<<< CP [S] \n");
 #endif
 //LGSI_P970_WAP_24thGBXMM_BaselineAdoption_Santosh_Start
-//		omap_pm_set_min_bus_tput(&(spi_data->spi->dev),OCP_INITIATOR_AGENT,800000);
+
 		ifx_spi_setup_transmission(spi_data);
 #ifdef CONFIG_LGE_SPI_MODE_SLAVE
 #else
@@ -1006,14 +917,12 @@ ifx_spi_handle_work(struct work_struct *work)
 #ifdef CONFIG_SPI_DEBUG
 		printk("<<<<<<<<<<<<<<<< CP [END] \n");
 #endif
-	//	omap_pm_set_min_bus_tput(&(spi_data->spi->dev),OCP_INITIATOR_AGENT,-1);
 	}
 	else
     {
 #ifdef CONFIG_SPI_DEBUG
 		printk("[LGE-SPI] INTERRUPT BY OMAP\n");
 #endif
-//		omap_pm_set_min_bus_tput(&(spi_data->spi->dev),OCP_INITIATOR_AGENT,800000);
 		ifx_spi_setup_transmission(spi_data);     
 		ifx_spi_send_and_receive_data(spi_data);
 		/* Once data transmission is completed, the MRDY signal is lowered */
@@ -1024,16 +933,13 @@ ifx_spi_handle_work(struct work_struct *work)
 				ifx_spi_set_mrdy_signal(spi_data, 0);
 
 //20100701-1, syblue.lee@lge.com, delay time until CP can be ready again [START]
-                //udelay(MRDY_DELAY_TIME);
-                udelay(400);   // Data TCP up link throughput - 0us->100us Changed for Sleep current issue 20110514
+                udelay(MRDY_DELAY_TIME);   // Data TCP up link throughput - 0us->100us Changed for Sleep current issue 20110514
 //20100701-1, syblue.lee@lge.com, delay time until CP can be ready again [END]
 				ifx_spi_buffer_initialization(spi_data);
 			}
 			spi_data->ifx_master_initiated_transfer = 0;
 			complete(&spi_data->ifx_read_write_completion);
 		}
-//		omap_pm_set_min_bus_tput(&(spi_data->spi->dev),OCP_INITIATOR_AGENT,-1);
-
 	}
 }
 //LGSI_P970_WAP_24thGBXMM_BaselineAdoption_Santosh_End
@@ -1107,7 +1013,7 @@ __exit ifx_spi_exit(void)
 {  
 	spi_unregister_driver(&ifx_spi_driver);
 	tty_unregister_driver(ifx_spi_tty_driver);
-        put_tty_driver(ifx_spi_tty_driver);
+    put_tty_driver(ifx_spi_tty_driver);
 }
 
 module_exit(ifx_spi_exit);

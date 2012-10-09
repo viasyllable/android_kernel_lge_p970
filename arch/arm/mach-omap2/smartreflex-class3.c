@@ -11,45 +11,53 @@
  * published by the Free Software Foundation.
  */
 
-#include <plat/smartreflex.h>
-
-#include "smartreflex-class3.h"
+#include <plat/cpu.h>
+#include "smartreflex.h"
 
 static int sr_class3_enable(struct voltagedomain *voltdm,
-		struct omap_volt_data *volt_data)
+			    void *voltdm_cdata,
+			    struct omap_volt_data *volt_data)
 {
 	omap_vp_enable(voltdm);
 	return sr_enable(voltdm, volt_data);
 }
 
 static int sr_class3_disable(struct voltagedomain *voltdm,
-				struct omap_volt_data *vdata,
-				int is_volt_reset)
+			     void *voltdm_cdata,
+			     struct omap_volt_data *vdata,
+			     int is_volt_reset)
 {
+	sr_disable_errgen(voltdm);
 	omap_vp_disable(voltdm);
 	sr_disable(voltdm);
 	if (is_volt_reset)
-		omap_voltage_reset(voltdm);
+		voltdm_reset(voltdm);
 
 	return 0;
 }
 
-static int sr_class3_configure(struct voltagedomain *voltdm)
+static int sr_class3_configure(struct voltagedomain *voltdm,
+			       void *voltdm_cdata)
 {
 	return sr_configure_errgen(voltdm);
 }
 
 /* SR class3 structure */
-static struct omap_smartreflex_class_data class3_data = {
+static struct omap_sr_class_data class3_data = {
 	.enable = sr_class3_enable,
 	.disable = sr_class3_disable,
 	.configure = sr_class3_configure,
 	.class_type = SR_CLASS3,
 };
 
-/* Smartreflex CLASS3 init API to be called from board file */
-int __init sr_class3_init(void)
+/* Smartreflex Class3 init API to be called from board file */
+static int __init sr_class3_init(void)
 {
-	pr_info("SmartReflex CLASS3 initialized\n");
-	return omap_sr_register_class(&class3_data);
+	/* Enable this class only for OMAP343x */
+	if (!cpu_is_omap343x())
+		return -EINVAL;
+
+	pr_info("SmartReflex Class3 initialized\n");
+	return sr_register_class(&class3_data);
 }
+late_initcall(sr_class3_init);

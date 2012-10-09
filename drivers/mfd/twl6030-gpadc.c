@@ -61,11 +61,11 @@ struct twl6030_ideal_code {
 	s16 code2;
 };
 
-static struct twl6030_calibration twl6030_calib_tbl[17];
+static struct twl6030_calibration twl6030_calib_tbl[TWL6030_GPADC_MAX_CHANNELS];
 static const u32 calibration_bit_map = 0x47FF;
 
 /* Trim address where measured offset from ideal code is stored */
-static const u8 twl6030_trim_addr[17] = {
+static const u8 twl6030_trim_addr[TWL6030_GPADC_MAX_CHANNELS] = {
 	0xCD, /* CHANNEL 0 */
 	0xD1, /* CHANNEL 1 */
 	0xD9, /* CHANNEL 2 */
@@ -88,18 +88,22 @@ static const u8 twl6030_trim_addr[17] = {
 /*
  * actual scaler gain is multiplied by 8 for fixed point operation
  * 1.875 * 8 = 15
+ * For channels 0, 1, 3, 4, 5, 6, 12, 13
+ * 1.25 * 8 = 10
+ * is used, as scaler is Vref * divider
+ * Vref = 1.25
  */
-static const u16 twl6030_gain[17] = {
-	1142,	/* CHANNEL 0 */
-	8,	/* CHANNEL 1 */
+static const u16 twl6030_gain[TWL6030_GPADC_MAX_CHANNELS] = {
+	10,	/* CHANNEL 0 */
+	10,	/* CHANNEL 1 */
 
 	/* 1.875 */
 	15,	/* CHANNEL 2 */
 
-	8,	/* CHANNEL 3 */
-	8,	/* CHANNEL 4 */
-	8,	/* CHANNEL 5 */
-	8,	/* CHANNEL 6 */
+	10,	/* CHANNEL 3 */
+	10,	/* CHANNEL 4 */
+	10,	/* CHANNEL 5 */
+	10,	/* CHANNEL 6 */
 
 	/* 5 */
 	40,	/* CHANNEL 7 */
@@ -115,21 +119,25 @@ static const u16 twl6030_gain[17] = {
 
 	/* 1.875 */
 	15,	/* CHANNEL 11 */
-	8,	/* CHANNEL 12 */
-	8,	/* CHANNEL 13 */
+
+	10,	/* CHANNEL 12 */
+	10,	/* CHANNEL 13 */
 
 	/* 6.875 */
 	55,	/* CHANNEL 14 */
 
-	8,	/* CHANNEL 15 */
-	8,	/* CHANNEL 16 */
+	/* 6.25 */
+	50,	/* CHANNEL 15 */
+
+	/* 4.75 */
+	38,	/* CHANNEL 16 */
 };
 
 /*
  * calibration not needed for channel 11, 12, 13, 15 and 16
  * calibration offset is same for channel 1, 3, 4, 5
  */
-static const struct twl6030_ideal_code twl6030_ideal[17] = {
+static const struct twl6030_ideal_code twl6030_ideal[TWL6030_GPADC_MAX_CHANNELS] = {
 	{116,	745},	/* CHANNEL 0 */
 	{82,	900},	/* CHANNEL 1 */
 	{55,	818},	/* CHANNEL 2 */
@@ -284,7 +292,7 @@ static int twl6030_gpadc_read_channels(struct twl6030_gpadc_data *gpadc,
 	s32 raw_channel_value;
 
 	for (i = 0; i < TWL6030_GPADC_MAX_CHANNELS; i++) {
-		if (channels & (1<<i)) {
+		if (channels & (1 << i)) {
 			reg = reg_base + 2 * i;
 			raw_code = twl6030_gpadc_channel_raw_read(gpadc, reg);
 			req->buf[i].raw_code = raw_code;
@@ -636,6 +644,8 @@ static int __devinit twl6030_gpadc_probe(struct platform_device *pdev)
 	s32 gain_error_1;
 	s32 offset_error;
 	u8 index;
+	int irq;
+	int irq_rt;
 	int ret;
 
 	gpadc = kzalloc(sizeof *gpadc, GFP_KERNEL);
@@ -655,14 +665,30 @@ static int __devinit twl6030_gpadc_probe(struct platform_device *pdev)
 		goto err_misc;
 	}
 
-	ret = request_irq(platform_get_irq(pdev, 0), twl6030_gpadc_irq_handler,
-			0, "twl6030_gpadc", &gpadc->requests[TWL6030_GPADC_RT]);
-	ret = request_irq(platform_get_irq(pdev, 1), twl6030_gpadc_irq_handler,
-		0, "twl6030_gpadc", &gpadc->requests[TWL6030_GPADC_SW2]);
+	irq_rt = platform_get_irq(pdev, 0);
+	if (irq_rt < 0) {
+		dev_err(&pdev->dev, "failed to get irq\n");
+		goto err_irq;
+	}
 
+	ret = request_threaded_irq(irq_rt, NULL, twl6030_gpadc_irq_handler,
+		0, "twl6030_gpadc", &gpadc->requests[TWL6030_GPADC_RT]);
 	if (ret) {
 		dev_dbg(&pdev->dev, "could not request irq\n");
 		goto err_irq;
+	}
+
+	irq = platform_get_irq(pdev, 1);
+	if (irq < 0) {
+		dev_err(&pdev->dev, "failed to get irq\n");
+		goto err_irq_rt;
+	}
+
+	ret = request_threaded_irq(irq, NULL, twl6030_gpadc_irq_handler,
+		0, "twl6030_gpadc", &gpadc->requests[TWL6030_GPADC_SW2]);
+	if (ret) {
+		dev_dbg(&pdev->dev, "could not request irq\n");
+		goto err_irq_rt;
 	}
 
 	platform_set_drvdata(pdev, gpadc);
@@ -699,6 +725,8 @@ static int __devinit twl6030_gpadc_probe(struct platform_device *pdev)
 
 	return 0;
 
+err_irq_rt:
+	free_irq(irq_rt, &gpadc->requests[TWL6030_GPADC_RT]);
 err_irq:
 	misc_deregister(&twl6030_gpadc_device);
 
@@ -723,12 +751,39 @@ static int __devexit twl6030_gpadc_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static int twl6030_gpadc_suspend(struct device *pdev)
+{
+	int ret;
+
+	ret = twl_i2c_write_u8(TWL6030_MODULE_ID1, GPADCR, REG_TOGGLE1);
+	if (ret)
+		pr_err("%s: Error reseting GPADC (%d)!\n", __func__, ret);
+
+	return 0;
+};
+
+static int twl6030_gpadc_resume(struct device *pdev)
+{
+	int ret;
+
+	ret = twl_i2c_write_u8(TWL6030_MODULE_ID1, GPADCS, REG_TOGGLE1);
+	if (ret)
+		pr_err("%s: Error setting GPADC (%d)!\n", __func__, ret);
+
+	return 0;
+};
+static const struct dev_pm_ops twl6030_gpadc_pm_ops = {
+	.suspend = twl6030_gpadc_suspend,
+	.resume = twl6030_gpadc_resume,
+};
+
 static struct platform_driver twl6030_gpadc_driver = {
 	.probe		= twl6030_gpadc_probe,
 	.remove		= __devexit_p(twl6030_gpadc_remove),
 	.driver		= {
 		.name	= "twl6030_gpadc",
 		.owner	= THIS_MODULE,
+		.pm = &twl6030_gpadc_pm_ops,
 	},
 };
 
@@ -748,4 +803,3 @@ MODULE_ALIAS("platform:twl6030-gpadc");
 MODULE_AUTHOR("Texas Instruments Inc.");
 MODULE_DESCRIPTION("twl6030 ADC driver");
 MODULE_LICENSE("GPL");
-

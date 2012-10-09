@@ -271,8 +271,8 @@ static void recv_tasklet(unsigned long arg)
 	/* Process all packets in the RX queue */
 	while ((skb = skb_dequeue(&fmdev->rx_q))) {
 		if (skb->len < sizeof(struct fm_event_msg_hdr)) {
-			fmerr("skb(%p) has only %d bytes"
-				"atleast need %d bytes to decode\n", skb,
+			fmerr("skb(%p) has only %d bytes, "
+				"at least need %zu bytes to decode\n", skb,
 				skb->len, sizeof(struct fm_event_msg_hdr));
 			kfree_skb(skb);
 			continue;
@@ -352,7 +352,7 @@ static void send_tasklet(unsigned long arg)
 	if (!atomic_read(&fmdev->tx_cnt))
 		return;
 
-	/* Check, is there any timeout happenned to last transmitted packet */
+	/* Check, is there any timeout happened to last transmitted packet */
 	if ((jiffies - fmdev->last_tx_jiffies) > FM_DRV_TX_TIMEOUT) {
 		fmdbg("TX timeout occurred\n");
 		atomic_set(&fmdev->tx_cnt, 1);
@@ -370,10 +370,7 @@ static void send_tasklet(unsigned long arg)
 		fmerr("Response completion handler is not NULL\n");
 
 	fmdev->resp_comp = fm_cb(skb)->completion;
-#ifdef VERBOSE
-	print_hex_dump(KERN_INFO, "<fm<", DUMP_PREFIX_NONE, 16, 1,
-			skb->data, skb->len > 20 ? 20 : skb->len, 0);
-#endif
+
 	/* Write FM packet to ST driver */
 	len = g_st_write(skb);
 	if (len < 0) {
@@ -481,7 +478,7 @@ u32 fmc_send_cmd(struct fmdev *fmdev, u8 fm_op, u16 type, void *payload,
 		return -ETIMEDOUT;
 	}
 	if (!fmdev->resp_skb) {
-		fmerr("Reponse SKB is missing\n");
+		fmerr("Response SKB is missing\n");
 		return -EFAULT;
 	}
 	spin_lock_irqsave(&fmdev->resp_skb_lock, flags);
@@ -618,7 +615,11 @@ static void fm_irq_handle_rds_start(struct fmdev *fmdev)
 {
 	if (fmdev->irq_info.flag & FM_RDS_EVENT & fmdev->irq_info.mask) {
 		fmdbg("irq: rds threshold reached\n");
-		fmdev->irq_info.stage = FM_RDS_SEND_RDS_GETCMD_IDX;
+		/* If RSSI reached below threshold then dont get RDS data */
+		if (fmdev->irq_info.flag & FM_LEV_EVENT)
+			fmdev->irq_info.stage = FM_HW_TUNE_OP_ENDED_IDX;
+		else
+			fmdev->irq_info.stage = FM_RDS_SEND_RDS_GETCMD_IDX;
 	} else {
 		/* Continue next function in interrupt handler table */
 		fmdev->irq_info.stage = FM_HW_TUNE_OP_ENDED_IDX;
@@ -1132,8 +1133,9 @@ u32 fmc_set_freq(struct fmdev *fmdev, u32 freq_to_set)
 
 u32 fmc_get_freq(struct fmdev *fmdev, u32 *cur_tuned_frq)
 {
-	if (fmdev->rx.freq == FM_UNDEFINED_FREQ) {
-		fmerr("RX frequency is not set\n");
+	if (fmdev->rx.freq == FM_UNDEFINED_FREQ &&
+			fmdev->tx_data.tx_frq == FM_UNDEFINED_FREQ) {
+		fmerr("RX/TX frequency is not set\n");
 		return -EPERM;
 	}
 	if (cur_tuned_frq == NULL) {
@@ -1147,7 +1149,7 @@ u32 fmc_get_freq(struct fmdev *fmdev, u32 *cur_tuned_frq)
 		return 0;
 
 	case FM_MODE_TX:
-		*cur_tuned_frq = 0;	/* TODO : Change this later */
+		*cur_tuned_frq = fmdev->tx_data.tx_frq;
 		return 0;
 
 	default:
@@ -1161,9 +1163,6 @@ u32 fmc_set_region(struct fmdev *fmdev, u8 region_to_set)
 	switch (fmdev->curr_fmmode) {
 	case FM_MODE_RX:
 		return fm_rx_set_region(fmdev, region_to_set);
-
-	case FM_MODE_TX:
-		return fm_tx_set_region(fmdev, region_to_set);
 
 	default:
 		return -EINVAL;
@@ -1497,7 +1496,6 @@ u32 fmc_prepare(struct fmdev *fmdev)
 	}
 
 	memset(&fm_st_proto, 0, sizeof(fm_st_proto));
-	fm_st_proto.type = ST_FM;
 	fm_st_proto.recv = fm_st_receive;
 	fm_st_proto.match_packet = NULL;
 	fm_st_proto.reg_complete_cb = fm_st_reg_comp_cb;
@@ -1580,6 +1578,8 @@ u32 fmc_prepare(struct fmdev *fmdev)
 	fmdev->rx.af_mode = FM_RX_RDS_AF_SWITCH_MODE_OFF;
 	fmdev->irq_info.retry = 0;
 
+	fmdev->tx_data.tx_frq = FM_UNDEFINED_FREQ;
+
 	fm_rx_reset_rds_cache(fmdev);
 	init_waitqueue_head(&fmdev->rx.rds.read_queue);
 
@@ -1602,7 +1602,7 @@ u32 fmc_release(struct fmdev *fmdev)
 		fmdbg("FM Core is already down\n");
 		return 0;
 	}
-	/* Sevice pending read */
+	/* Service pending read */
 	wake_up_interruptible(&fmdev->rx.rds.read_queue);
 
 	tasklet_kill(&fmdev->tx_task);
@@ -1637,7 +1637,7 @@ static int __init fm_drv_init(void)
 	struct fmdev *fmdev = NULL;
 	u32 ret = -ENOMEM;
 
-	printk("FM Radio: V4L2 FM Driver for TI WiLink - Version %s\n", FM_DRV_VERSION);
+	fmdbg("FM driver version %s\n", FM_DRV_VERSION);
 
 	fmdev = kzalloc(sizeof(struct fmdev), GFP_KERNEL);
 	if (NULL == fmdev) {

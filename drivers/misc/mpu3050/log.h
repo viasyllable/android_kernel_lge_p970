@@ -49,9 +49,10 @@ extern "C" {
  * You can modify this (for example with "#define MPL_LOG_NDEBUG 0"
  * at the top of your source file) to change that behavior.
  */
-
+/* LGE_CHANGE_S, hyun.seungjin@lge.com, 2011-02-09, Prevent MPL Debug Message */
 #define MPL_LOG_NDEBUG 1
 //#undef MPL_LOG_NDEBUG
+/* LGE_CHANGE_E, hyun.seungjin@lge.com, 2011-02-09, Prevent MPL Debug Message */
 #ifndef MPL_LOG_NDEBUG
 #ifdef NDEBUG
 #define MPL_LOG_NDEBUG 1
@@ -129,14 +130,16 @@ extern "C" {
  * Simplified macro to send a debug log message using the current MPL_LOG_TAG.
  */
 #ifndef MPL_LOGD
+/* LGE_CHANGE_S, hyun.seungjin@lge.com, 2011-02-09, Prevent MPL Debug Message */
 #if MPL_LOG_NDEBUG
 #define MPL_LOGD(...) ((void)0)
 #else
+/* LGE_CHANGE_E, hyun.seungjin@lge.com, 2011-02-09, Prevent MPL Debug Message */
 #define MPL_LOGD(...) ((void)MPL_LOG(LOG_DEBUG, MPL_LOG_TAG, __VA_ARGS__))
 #endif
-
+/* LGE_CHANGE_S, hyun.seungjin@lge.com, 2011-02-09, Prevent MPL Debug Message */
 #endif
-
+/* LGE_CHANGE_E, hyun.seungjin@lge.com, 2011-02-09, Prevent MPL Debug Message */
 
 #ifndef MPL_LOGD_IF
 #define MPL_LOGD_IF(cond, ...) \

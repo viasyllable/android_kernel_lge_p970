@@ -19,16 +19,81 @@
 #include <linux/clk.h>
 #include <linux/mutex.h>
 #include <linux/cpufreq.h>
+#include <linux/notifier.h>
 #include <linux/debugfs.h>
 #include <linux/io.h>
+#include <linux/slab.h>
 
 #include <plat/clock.h>
 
 static LIST_HEAD(clocks);
+static LIST_HEAD(clk_notifier_list);
 static DEFINE_MUTEX(clocks_mutex);
 static DEFINE_SPINLOCK(clockfw_lock);
 
 static struct clk_functions *arch_clock;
+
+/**
+ * omap_clk_notify - call clk notifier chain
+ * @clk: struct clk * that is changing rate
+ * @msg: clk notifier type (i.e., CLK_POST_RATE_CHANGE; see mach/clock.h)
+ * @old_rate: old rate
+ * @new_rate: new rate
+ *
+ * Triggers a notifier call chain on the post-clk-rate-change notifier
+ * for clock 'clk'.  Passes a pointer to the struct clk and the
+ * previous and current rates to the notifier callback.  Intended to be
+ * called by internal clock code only.  No return value.
+ */
+static void omap_clk_notify(struct clk *clk, unsigned long msg,
+		unsigned long old_rate, unsigned long new_rate)
+{
+	struct clk_notifier *cn;
+	struct clk_notifier_data cnd;
+
+	cnd.clk = clk;
+	cnd.old_rate = old_rate;
+	cnd.new_rate = new_rate;
+
+	list_for_each_entry(cn, &clk_notifier_list, node) {
+		if (cn->clk == clk) {
+			blocking_notifier_call_chain(&cn->notifier_head, msg,
+					&cnd);
+			break;
+		}
+	}
+}
+
+/**
+ * omap_clk_notify_downstream - trigger clock change notifications
+ * @clk: struct clk * to start the notifications with
+ * @msg: notifier msg - see "Clk notifier callback types"
+ * @new_rate: new rate
+ *
+ * Call clock change notifiers on clocks starting with @clk and including
+ * all of @clk's downstream children clocks.  Returns NOTIFY_DONE.
+ */
+static int omap_clk_notify_downstream(struct clk *clk, unsigned long msg,
+		unsigned long new_rate)
+{
+	unsigned long new_child_rate;
+	struct clk *child_clk;
+
+	/* send out notification for this clock */
+	if (clk->notifier_count)
+		omap_clk_notify(clk, msg, clk->rate, new_rate);
+
+	list_for_each_entry(child_clk, &clk->children, sibling) {
+		if (child_clk->speculate) {
+			new_child_rate =
+				child_clk->speculate(child_clk, new_rate);
+			omap_clk_notify_downstream(child_clk, msg,
+					new_child_rate);
+		}
+	}
+
+	return NOTIFY_DONE;
+}
 
 /*
  * Standard clock functions defined in include/linux/clk.h
@@ -37,14 +102,16 @@ static struct clk_functions *arch_clock;
 int clk_enable(struct clk *clk)
 {
 	unsigned long flags;
-	int ret = 0;
+	int ret;
 
 	if (clk == NULL || IS_ERR(clk))
 		return -EINVAL;
 
+	if (!arch_clock || !arch_clock->clk_enable)
+		return -EINVAL;
+
 	spin_lock_irqsave(&clockfw_lock, flags);
-	if (arch_clock->clk_enable)
-		ret = arch_clock->clk_enable(clk);
+	ret = arch_clock->clk_enable(clk);
 	spin_unlock_irqrestore(&clockfw_lock, flags);
 
 	return ret;
@@ -58,16 +125,18 @@ void clk_disable(struct clk *clk)
 	if (clk == NULL || IS_ERR(clk))
 		return;
 
+	if (!arch_clock || !arch_clock->clk_disable)
+		return;
+
 	spin_lock_irqsave(&clockfw_lock, flags);
 	if (clk->usecount == 0) {
-		printk(KERN_ERR "Trying disable clock %s with 0 usecount\n",
+		pr_err("Trying disable clock %s with 0 usecount\n",
 		       clk->name);
 		WARN_ON(1);
 		goto out;
 	}
 
-	if (arch_clock->clk_disable)
-		arch_clock->clk_disable(clk);
+	arch_clock->clk_disable(clk);
 
 out:
 	spin_unlock_irqrestore(&clockfw_lock, flags);
@@ -77,7 +146,7 @@ EXPORT_SYMBOL(clk_disable);
 unsigned long clk_get_rate(struct clk *clk)
 {
 	unsigned long flags;
-	unsigned long ret = 0;
+	unsigned long ret;
 
 	if (clk == NULL || IS_ERR(clk))
 		return 0;
@@ -97,14 +166,16 @@ EXPORT_SYMBOL(clk_get_rate);
 long clk_round_rate(struct clk *clk, unsigned long rate)
 {
 	unsigned long flags;
-	long ret = 0;
+	long ret;
 
 	if (clk == NULL || IS_ERR(clk))
-		return ret;
+		return 0;
+
+	if (!arch_clock || !arch_clock->clk_round_rate)
+		return 0;
 
 	spin_lock_irqsave(&clockfw_lock, flags);
-	if (arch_clock->clk_round_rate)
-		ret = arch_clock->clk_round_rate(clk, rate);
+	ret = arch_clock->clk_round_rate(clk, rate);
 	spin_unlock_irqrestore(&clockfw_lock, flags);
 
 	return ret;
@@ -114,20 +185,31 @@ EXPORT_SYMBOL(clk_round_rate);
 int clk_set_rate(struct clk *clk, unsigned long rate)
 {
 	unsigned long flags;
+	unsigned long new_rate;
+	unsigned long msg;
 	int ret = -EINVAL;
 
 	if (clk == NULL || IS_ERR(clk))
 		return ret;
 
+	if (!arch_clock || !arch_clock->clk_set_rate)
+		return ret;
+
+	if (clk->round_rate)
+		new_rate = clk->round_rate(clk, rate);
+	else
+		new_rate = rate;
+
+	omap_clk_notify_downstream(clk, CLK_PRE_RATE_CHANGE, new_rate);
+
 	spin_lock_irqsave(&clockfw_lock, flags);
-	if (arch_clock->clk_set_rate)
-		ret = arch_clock->clk_set_rate(clk, rate);
-	if (ret == 0) {
-		if (clk->recalc)
-			clk->rate = clk->recalc(clk);
+	ret = arch_clock->clk_set_rate(clk, rate);
+	if (ret == 0)
 		propagate_rate(clk);
-	}
 	spin_unlock_irqrestore(&clockfw_lock, flags);
+
+	msg = (ret) ? CLK_ABORT_RATE_CHANGE : CLK_POST_RATE_CHANGE;
+	omap_clk_notify_downstream(clk, msg, clk->rate);
 
 	return ret;
 }
@@ -136,23 +218,30 @@ EXPORT_SYMBOL(clk_set_rate);
 int clk_set_parent(struct clk *clk, struct clk *parent)
 {
 	unsigned long flags;
+	unsigned long new_rate;
+	unsigned long msg;
 	int ret = -EINVAL;
 
 	if (clk == NULL || IS_ERR(clk) || parent == NULL || IS_ERR(parent))
 		return ret;
 
+	if (!arch_clock || !arch_clock->clk_set_parent)
+		return ret;
+
+	new_rate = arch_clock->clk_round_rate_parent(clk, parent);
+	omap_clk_notify_downstream(clk, CLK_PRE_RATE_CHANGE, new_rate);
+
 	spin_lock_irqsave(&clockfw_lock, flags);
 	if (clk->usecount == 0) {
-		if (arch_clock->clk_set_parent)
-			ret = arch_clock->clk_set_parent(clk, parent);
-		if (ret == 0) {
-			if (clk->recalc)
-				clk->rate = clk->recalc(clk);
+		ret = arch_clock->clk_set_parent(clk, parent);
+		if (ret == 0)
 			propagate_rate(clk);
-		}
 	} else
 		ret = -EBUSY;
 	spin_unlock_irqrestore(&clockfw_lock, flags);
+
+	msg = (ret) ? CLK_ABORT_RATE_CHANGE : CLK_POST_RATE_CHANGE;
+	omap_clk_notify_downstream(clk, msg, clk->rate);
 
 	return ret;
 }
@@ -286,12 +375,6 @@ int clk_register(struct clk *clk)
 }
 EXPORT_SYMBOL(clk_register);
 
-struct list_head *mg_omap_clk_clocks_list_head(void)
-{                                                   
-	    return &clocks;                                 
-}                                                   
-EXPORT_SYMBOL(mg_omap_clk_clocks_list_head);        
-
 void clk_unregister(struct clk *clk)
 {
 	if (clk == NULL || IS_ERR(clk))
@@ -340,7 +423,155 @@ struct clk *omap_clk_get_by_name(const char *name)
 
 	return ret;
 }
-EXPORT_SYMBOL(omap_clk_get_by_name);
+
+int omap_clk_enable_autoidle_all(void)
+{
+	struct clk *c;
+	unsigned long flags;
+
+	spin_lock_irqsave(&clockfw_lock, flags);
+
+	list_for_each_entry(c, &clocks, node)
+		if (c->ops->allow_idle)
+			c->ops->allow_idle(c);
+
+	spin_unlock_irqrestore(&clockfw_lock, flags);
+
+	return 0;
+}
+
+int omap_clk_disable_autoidle_all(void)
+{
+	struct clk *c;
+	unsigned long flags;
+
+	spin_lock_irqsave(&clockfw_lock, flags);
+
+	list_for_each_entry(c, &clocks, node)
+		if (c->ops->deny_idle)
+			c->ops->deny_idle(c);
+
+	spin_unlock_irqrestore(&clockfw_lock, flags);
+
+	return 0;
+}
+
+/*
+ * clock notifiers
+ */
+
+/**
+ * clk_notifier_register - add a clock parameter change notifier
+ * @clk: struct clk * to watch
+ * @nb: struct notifier_block * with callback info
+ *
+ * Request notification for changes to the clock 'clk'.  This uses a
+ * blocking notifier.  Callback code must not call back into the clock
+ * framework.  Pre-notifier callbacks will be passed the previous and
+ * new rate of the clock.
+ *
+ * clk_notifier_register() must be called from process
+ * context.  Returns -EINVAL if called with null arguments, -ENOMEM
+ * upon allocation failure; otherwise, passes along the return value
+ * of blocking_notifier_chain_register().
+ */
+int clk_notifier_register(struct clk *clk, struct notifier_block *nb)
+{
+	struct clk_notifier *cn = NULL, *cn_new = NULL;
+	int r;
+	unsigned long flags;
+	struct clk *clkp;
+
+	if (!clk || !nb)
+		return -EINVAL;
+
+	/* Allocate this here speculatively to avoid GFP_ATOMIC */
+	cn_new = kzalloc(sizeof(struct clk_notifier), GFP_KERNEL);
+	if (!cn_new)
+		return -ENOMEM;
+
+	spin_lock_irqsave(&clockfw_lock, flags);
+
+	list_for_each_entry(cn, &clk_notifier_list, node)
+		if (cn->clk == clk)
+			break;
+
+	if (cn->clk != clk) {
+		cn_new->clk = clk;
+		BLOCKING_INIT_NOTIFIER_HEAD(&cn_new->notifier_head);
+
+		list_add(&cn_new->node, &clk_notifier_list);
+		cn = cn_new;
+	} else {
+		kfree(cn_new); /* didn't need it after all */
+	}
+
+	r = blocking_notifier_chain_register(&cn->notifier_head, nb);
+	if (!r) {
+		clkp = clk;
+		do {
+			clkp->notifier_count++;
+		} while ((clkp = clkp->parent));
+	}
+
+	spin_unlock_irqrestore(&clockfw_lock, flags);
+
+	return r;
+}
+
+/**
+ * clk_notifier_unregister - remove a clock change notifier
+ * @clk: struct clk *
+ * @nb: struct notifier_block * with callback info
+ *
+ * Request no further notification for changes to clock 'clk'.  This
+ * function presently does not release memory allocated by its
+ * corresponding _register function; see inline comments for more
+ * information.  Returns -EINVAL if called with null arguments;
+ * otherwise, passes along the return value of
+ * blocking_notifier_chain_unregister().
+ */
+int clk_notifier_unregister(struct clk *clk, struct notifier_block *nb)
+{
+	struct clk_notifier *cn = NULL;
+	struct clk *clkp;
+	int r = -EINVAL;
+	unsigned long flags;
+
+	if (!clk || !nb)
+		return -EINVAL;
+
+	spin_lock_irqsave(&clockfw_lock, flags);
+
+	list_for_each_entry(cn, &clk_notifier_list, node)
+		if (cn->clk == clk)
+			break;
+
+	if (cn->clk == clk) {
+		r = blocking_notifier_chain_unregister(&cn->notifier_head, nb);
+
+		if (!r) {
+			clkp = clk;
+			do {
+				clkp->notifier_count--;
+			} while ((clkp = clkp->parent));
+		}
+
+		/*
+		 * XXX ugh, layering violation.  there should be some
+		 * support in the notifier code for this.
+		 */
+		if (!cn->notifier_head.head)
+			kfree(cn);
+
+	} else {
+		r = -ENOENT;
+	}
+
+	spin_unlock_irqrestore(&clockfw_lock, flags);
+
+	return r;
+}
 
 /*
  * Low level helpers
@@ -374,9 +605,11 @@ void clk_init_cpufreq_table(struct cpufreq_frequency_table **table)
 {
 	unsigned long flags;
 
+	if (!arch_clock || !arch_clock->clk_init_cpufreq_table)
+		return;
+
 	spin_lock_irqsave(&clockfw_lock, flags);
-	if (arch_clock->clk_init_cpufreq_table)
-		arch_clock->clk_init_cpufreq_table(table);
+	arch_clock->clk_init_cpufreq_table(table);
 	spin_unlock_irqrestore(&clockfw_lock, flags);
 }
 
@@ -384,9 +617,11 @@ void clk_exit_cpufreq_table(struct cpufreq_frequency_table **table)
 {
 	unsigned long flags;
 
+	if (!arch_clock || !arch_clock->clk_exit_cpufreq_table)
+		return;
+
 	spin_lock_irqsave(&clockfw_lock, flags);
-	if (arch_clock->clk_exit_cpufreq_table)
-		arch_clock->clk_exit_cpufreq_table(table);
+	arch_clock->clk_exit_cpufreq_table(table);
 	spin_unlock_irqrestore(&clockfw_lock, flags);
 }
 #endif
@@ -404,6 +639,10 @@ static int __init clk_disable_unused(void)
 	struct clk *ck;
 	unsigned long flags;
 
+	if (!arch_clock || !arch_clock->clk_disable_unused)
+		return 0;
+
+	pr_info("clock: disabling unused clocks to save power\n");
 	list_for_each_entry(ck, &clocks, node) {
 		if (ck->ops == &clkops_null)
 			continue;
@@ -412,20 +651,20 @@ static int __init clk_disable_unused(void)
 			continue;
 
 		spin_lock_irqsave(&clockfw_lock, flags);
-		if (arch_clock->clk_disable_unused)
-			arch_clock->clk_disable_unused(ck);
+		arch_clock->clk_disable_unused(ck);
 		spin_unlock_irqrestore(&clockfw_lock, flags);
 	}
 
 	return 0;
 }
 late_initcall(clk_disable_unused);
+late_initcall(omap_clk_enable_autoidle_all);
 #endif
 
 int __init clk_init(struct clk_functions * custom_clocks)
 {
 	if (!custom_clocks) {
-		printk(KERN_ERR "No custom clock functions registered\n");
+		pr_err("No custom clock functions registered\n");
 		BUG();
 	}
 
@@ -438,7 +677,42 @@ int __init clk_init(struct clk_functions * custom_clocks)
 /*
  *	debugfs support to trace clock tree hierarchy and attributes
  */
+
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
+
 static struct dentry *clk_debugfs_root;
+
+static int clk_dbg_show_summary(struct seq_file *s, void *unused)
+{
+	struct clk *c;
+	struct clk *pa;
+
+	seq_printf(s, "%-30s %-30s %-10s %s\n",
+		"clock-name", "parent-name", "rate", "use-count");
+
+	mutex_lock(&clocks_mutex);
+	list_for_each_entry(c, &clocks, node) {
+		pa = c->parent;
+		seq_printf(s, "%-30s %-30s %-10lu %d\n",
+			c->name, pa ? pa->name : "none", c->rate, c->usecount);
+	}
+
+	mutex_unlock(&clocks_mutex);
+	return 0;
+}
+
+static int clk_dbg_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, clk_dbg_show_summary, inode->i_private);
+}
+
+static const struct file_operations debug_clock_fops = {
+	.open           = clk_dbg_open,
+	.read           = seq_read,
+	.llseek         = seq_lseek,
+	.release        = single_release,
+};
 
 static int clk_debugfs_register_one(struct clk *c)
 {
@@ -514,6 +788,12 @@ static int __init clk_debugfs_init(void)
 		if (err)
 			goto err_out;
 	}
+
+	d = debugfs_create_file("summary", S_IRUGO,
+		d, NULL, &debug_clock_fops);
+	if (!d)
+		return -ENOMEM;
+
 	return 0;
 err_out:
 	debugfs_remove_recursive(clk_debugfs_root);

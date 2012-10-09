@@ -1,7 +1,7 @@
 /*
  * MFD driver for twl4030 codec submodule
  *
- * Author:	Peter Ujfalusi <peter.ujfalusi@nokia.com>
+ * Author: Peter Ujfalusi <peter.ujfalusi@ti.com>
  *
  * Copyright:   (C) 2009 Nokia Corporation
  *
@@ -265,16 +265,13 @@ enum twl4030_codec_res {
 	TWL4030_CODEC_RES_MAX,
 };
 // 20110106 prime@sdcmicro.com copy from sound/codecs/twl4030.h [START]
-#if defined(CONFIG_MACH_LGE_HUB) /* LGE_CHANGE_S [iggikim@lge.com] 2009-08-06, audio path */
+#if defined(CONFIG_PRODUCT_LGE_LU6800) || defined(CONFIG_PRODUCT_LGE_KU5900) || defined (CONFIG_PRODUCT_LGE_P970)
 typedef enum {
 	TWL4030_AUDIO_MODE,
 	TWL4030_HEADSET_CALL_MODE,
 	TWL4030_SPEAKER_CALL_MODE,
 	TWL4030_RECEIVER_CALL_MODE,
 	TWL4030_HEADPHONE_CALL_MODE
-//LGSI_VS910_FroyoToGB_VT Call shidhar.ms@lge.com_14Jul2011_START
-
-#if 1//20110126 jisun.kwon vt_bt_audiopath
 	,TWL4030_VT_BT_CALL_MODE
 	,TWL4030_VT_HEADSET_CALL_MODE
 	,TWL4030_VT_SPEAKER_CALL_MODE
@@ -282,24 +279,28 @@ typedef enum {
 	,TWL4030_VT_HEADPHONE_CALL_MODE
 	,TWL4030_VT_CALL_END_MODE
 	,TWL4030_VOIP_CALL_END_MODE
-#endif 
-//LGSI_VS910_FroyoToGB_VT Call shidhar.ms@lge.com_14Jul2011_END
-
 }voice_mode_enum;
+
 
 typedef enum
 {
-	TWL4030_CMD,
-	TWL4030_DELAY,
-	TWL4030_END_SEQ
+    TWL4030_CMD,
+    TWL4030_DELAY,
+    TWL4030_END_SEQ
 } twl_reg_control_type;
 
 typedef struct
 {
-	twl_reg_control_type irc;
-	u8 address;
-	int data;
+  twl_reg_control_type irc;
+  u8 address;
+  int data;
 } twl_reg_type;
+
+#if defined(CONFIG_PRODUCT_LGE_KU5900)
+void set_ext_amp_mode(int mode);
+int get_twl4030_headset_spk_codec_status(void);
+int get_twl4030_apll_state(void);
+#endif
 
 int voice_get_curmode(void);
 void voice_configure_path(voice_mode_enum mode);
@@ -325,12 +326,14 @@ typedef enum {
 int callrec_get_curmode(void);
 void callrec_configure_path(callrec_mode_enum mode);
 // 20100521 junyeop.kim@lge.com call recording path [END_LGE]
-#endif /* LGE_CHANGE_E [iggikim@lge.com]*/
+#endif	// defined(CONFIG_PRODUCT_LGE_LU6800) || defined(CONFIG_PRODUCT_LGE_KU5900) || defined (CONFIG_PRODUCT_LGE_P970)
 
-///////////////////////////////////////////////////// [END]
-
-int twl4030_codec_disable_resource(unsigned id);
+int twl4030_codec_disable_resource(enum twl4030_codec_res id);
 int twl4030_codec_enable_resource(enum twl4030_codec_res id);
 unsigned int twl4030_codec_get_mclk(void);
 
+extern int twl4030_cpu_enable_ext_clock(struct snd_soc_codec *codec,
+	struct snd_soc_dai *codec_dai);
+extern int twl4030_cpu_disable_ext_clock(struct snd_soc_codec *codec,
+	struct snd_soc_dai *codec_dai);
 #endif	/* End of __TWL4030_CODEC_H__ */

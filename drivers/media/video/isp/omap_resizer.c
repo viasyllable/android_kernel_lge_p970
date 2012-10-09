@@ -65,7 +65,7 @@ struct device_params {
 	struct videobuf_queue_ops vbq_ops;	/* videobuf queue operations */
 };
 
-static struct device 		*rsz_device;
+static struct device		*rsz_device;
 static struct class		*rsz_class;
 static struct device_params	*rsz_params;
 static int			 rsz_major = -1;
@@ -140,13 +140,12 @@ int rsz_ioc_run_engine(struct rsz_fhdl *fhdl)
 	struct isp_freq_devider *fdiv;
 
 	if (fhdl->config != STATE_CONFIGURED) {
-		dev_err(rsz_device, "State not configured \n");
+		dev_err(rsz_device, "State not configured\n");
 		return -EINVAL;
 	}
 
 	fhdl->status = CHANNEL_BUSY;
 
-	down(&rsz_hardware_mutex);
 
 	if (ispresizer_s_pipeline(&fhdl->isp_dev->isp_res, &fhdl->pipe) != 0)
 		return -EINVAL;
@@ -195,7 +194,6 @@ int rsz_ioc_run_engine(struct rsz_fhdl *fhdl)
 		dev_crit(rsz_device, "\nTimeout exit from"
 				     " wait_for_completion\n");
 
-	up(&rsz_hardware_mutex);
 
 	fhdl->status = CHANNEL_FREE;
 	fhdl->config = STATE_NOTDEFINED;
@@ -314,12 +312,13 @@ static int rsz_vbq_setup(struct videobuf_queue *q, unsigned int *cnt,
 		return -EINVAL;
 	}
 
+	// MMS (0621) : align videobuffer size to fix bug (QVGA, VGA capture isssue)
 	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE)
-		*size = fhdl->pipe.out.image.bytesperline *
-			fhdl->pipe.out.image.height;
+		*size = ALIGN(fhdl->pipe.out.image.bytesperline *
+			fhdl->pipe.out.image.height, 4096);
 	else if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT)
-		*size = fhdl->pipe.in.image.bytesperline *
-			fhdl->pipe.in.image.height;
+		*size = ALIGN(fhdl->pipe.in.image.bytesperline *
+			fhdl->pipe.in.image.height, 4096);
 	else
 		return -EINVAL;
 
@@ -499,13 +498,13 @@ static int rsz_open(struct inode *inode, struct file *fp)
 	videobuf_queue_sg_init(&fhdl->src_vbq, &device->vbq_ops, NULL,
 			       &fhdl->src_vbq_lock, fhdl->src_vbq.type,
 			       V4L2_FIELD_NONE, sizeof(struct videobuf_buffer),
-			       fhdl);
+			       fhdl, NULL);
 	spin_lock_init(&fhdl->src_vbq_lock);
 
 	videobuf_queue_sg_init(&fhdl->dst_vbq, &device->vbq_ops, NULL,
 			       &fhdl->dst_vbq_lock, fhdl->dst_vbq.type,
 			       V4L2_FIELD_NONE, sizeof(struct videobuf_buffer),
-			       fhdl);
+			       fhdl, NULL);
 	spin_lock_init(&fhdl->dst_vbq_lock);
 
 	return 0;
@@ -550,6 +549,13 @@ static int rsz_release(struct inode *inode, struct file *filp)
 	isp_stop(fhdl->isp);
 
 	isp_put();
+
+	// (+) ymjun [0719] : memleak patch from GB
+	if (&fhdl->src_vbq)
+		videobuf_mmap_free(&fhdl->src_vbq);
+	if (&fhdl->dst_vbq)
+		videobuf_mmap_free(&fhdl->dst_vbq);	
+	// (-) ymjun [0719]  : memleak patch from GB
 
 	kfree(fhdl);
 
@@ -736,7 +742,7 @@ static long rsz_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 		strcpy(v4l2_cap.driver, "omap3wrapper");
 		strcpy(v4l2_cap.card, "omap3wrapper/resizer");
-		v4l2_cap.version	= 1.0;;
+		v4l2_cap.version	= 1.0;
 		v4l2_cap.capabilities	= V4L2_CAP_VIDEO_CAPTURE |
 					  V4L2_CAP_READWRITE;
 

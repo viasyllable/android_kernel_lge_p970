@@ -53,9 +53,18 @@
 // hgahn
 //#define IFX_SPI_MAX_BUF_SIZE		1528	/* Max buffer size */
 //#define IFX_SPI_DEFAULT_BUF_SIZE	128 	/* Default buffer size*/
+
+//In LG U+ Network, the max size of IP data is 2600 bytes.
+//--[[ LGE_UBIQUIX_MODIFIED_START : shyun@ubiquix.com [2011.07.20] - Config definition is modified.
+//#if defined(CONFIG_MACH_LGE_JUSTIN) || defined(CONFIG_MACH_LGE_HUB)
+#if defined(CONFIG_PRODUCT_LGE_LU6800) || defined(CONFIG_PRODUCT_LGE_HUB)
+#define IFX_SPI_MAX_BUF_SIZE		2620	/* Max buffer size */
+#define IFX_SPI_DEFAULT_BUF_SIZE	2620 	/* Default buffer size*/
+#else
 #define IFX_SPI_MAX_BUF_SIZE		2044	/* Max buffer size */
 #define IFX_SPI_DEFAULT_BUF_SIZE	2044 	/* Default buffer size*/
-
+#endif
+//--]] LGE_UBIQUIX_MODIFIED_END : shyun@ubiquix.com [2011.07.20]- Config definition is modified.
 
 
 #define IFX_SPI_HEADER_SIZE		4

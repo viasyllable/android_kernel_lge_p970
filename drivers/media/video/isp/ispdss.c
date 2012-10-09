@@ -6,8 +6,8 @@
  * Copyright (C) 2008 Texas Instruments, Inc.
  *
  * Contributors:
- * 	Sergio Aguirre <saaguirre@ti.com>
- * 	Troy Laramy <t-laramy@ti.com>
+ *	Sergio Aguirre <saaguirre@ti.com>
+ *	Troy Laramy <t-laramy@ti.com>
  *
  * This package is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -32,21 +32,15 @@
 #include <asm/cacheflush.h>
 #include <plat/iovmm.h>
 
-#include <media/v4l2-dev.h>
-#include <media/v4l2-ioctl.h>
-#include <media/v4l2-common.h>
-#include <media/v4l2-device.h>
-#include <plat/vrfb.h>
-
 #include "isp.h"
 #include "ispreg.h"
 #include "ispresizer.h"
 #include <linux/ispdss.h>
-#include "../omap/omap_voutdef.h"
+
 /**
  * WA: Adjustment operation speed of ISP Resizer engine
  */
-#define ISPDSS_RSZ_EXPAND_720p	16
+#define ISPDSS_RSZ_EXPAND_720p	4
 
 enum config_done {
 	STATE_CONFIGURED,		/* Resizer driver configured */
@@ -57,7 +51,7 @@ static struct {
 	unsigned char opened;
 	struct completion compl_isr;
 	struct videobuf_queue_ops vbq_ops;
-	ispdss_callback 	callback;
+	ispdss_callback	callback;
 	u32 in_buf_virt_addr[32];
 	u32 out_buf_virt_addr[32];
 	u32 num_video_buffers;
@@ -232,7 +226,6 @@ int ispdss_begin(struct isp_node *pipe, u32 input_buffer_index,
 	unsigned int output_size;
 	struct isp_device *isp = dev_get_drvdata(dev_ctx.isp);
 	struct isp_res_device *isp_res = &isp->isp_res;
-	u32 speed_val = 0;
 
 	if (output_buffer_index >= dev_ctx.num_video_buffers) {
 		dev_err(dev_ctx.isp,
@@ -241,7 +234,7 @@ int ispdss_begin(struct isp_node *pipe, u32 input_buffer_index,
 	}
 
 	if (dev_ctx.config_state != STATE_CONFIGURED) {
-		dev_err(dev_ctx.isp, "State not configured \n");
+		dev_err(dev_ctx.isp, "State not configured\n");
 		return -EINVAL;
 	}
 
@@ -262,7 +255,7 @@ int ispdss_begin(struct isp_node *pipe, u32 input_buffer_index,
 		if (IS_ERR_VALUE(
 			dev_ctx.out_buf_virt_addr[output_buffer_index])) {
 			dev_err(dev_ctx.isp, "Mapping of output buffer failed"
-						"for index \n");
+						"for index\n");
 			return -ENOMEM;
 		}
 	}
@@ -274,7 +267,7 @@ int ispdss_begin(struct isp_node *pipe, u32 input_buffer_index,
 		if (IS_ERR_VALUE(
 			dev_ctx.in_buf_virt_addr[input_buffer_index])) {
 			dev_err(dev_ctx.isp, "Mapping of input buffer failed"
-						"for index \n");
+						"for index\n");
 			return -ENOMEM;
 		}
 	}
@@ -301,24 +294,12 @@ int ispdss_begin(struct isp_node *pipe, u32 input_buffer_index,
 	/* All settings are done.Enable the resizer */
 	init_completion(&dev_ctx.compl_isr);
 
-//	isp_start(dev_ctx.isp);
-	/* Only for 720p case*/
-	if (use_isp_resizer_decoder){
-		/*decoder */
-		speed_val = 0;
-
-	}else{
-		/* encoder */
-		speed_val = 8;
-
-	}
+	isp_start(dev_ctx.isp);
 
 	/* WA: Slowdown ISP Resizer to reduce used memory bandwidth */
 	isp_reg_and_or(dev_ctx.isp, OMAP3_ISP_IOMEM_SBL, ISPSBL_SDR_REQ_EXP,
 		       ~ISPSBL_SDR_REQ_RSZ_EXP_MASK,
-//		       ISPDSS_RSZ_EXPAND_720p << ISPSBL_SDR_REQ_RSZ_EXP_SHIFT);
-				speed_val << ISPSBL_SDR_REQ_RSZ_EXP_SHIFT);
-	isp_start(dev_ctx.isp);
+		       ISPDSS_RSZ_EXPAND_720p << ISPSBL_SDR_REQ_RSZ_EXP_SHIFT);
 
 	ispresizer_enable(isp_res, 1);
 

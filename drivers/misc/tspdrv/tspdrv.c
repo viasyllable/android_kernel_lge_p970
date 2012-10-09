@@ -40,6 +40,9 @@
 #include		<linux/version.h>
 #include		<linux/miscdevice.h>
 #include		<linux/platform_device.h>
+#include		<linux/smp.h>
+#include		<linux/cpu.h>
+#include		<linux/sched.h>
 #include		<asm/uaccess.h>
 #include		"tspdrv.h"
 #include		"ImmVibeSPI.c"
@@ -48,7 +51,7 @@
 #endif
 
 /* ======================== Device name and version information ======================== */
-#define VERSION_STR " v3.4.55.3\n"                  /* DO NOT CHANGE - this is auto-generated */
+#define VERSION_STR " v3.4.55.8\n"                  /* DO NOT CHANGE - this is auto-generated */
 #define		VERSION_STR_LEN		16				/* account extra space for future extra digits in version number */
 static char	g_szDeviceName[  (VIBE_MAX_DEVICE_NAME_LENGTH 
 				+ VERSION_STR_LEN)
@@ -76,7 +79,11 @@ static 		VibeInt8 				g_nForceLog[FORCE_LOG_BUFFER_SIZE];
 #if ((LINUX_VERSION_CODE & 0xFFFF00) < KERNEL_VERSION(2,6,0))
 #error Unsupported Kernel version
 #endif
-
+//[LGE_CHANGE_S] seungmoon.lee@lge.com, 2012-02-29
+#ifndef HAVE_UNLOCKED_IOCTL
+#define HAVE_UNLOCKED_IOCTL 1
+#endif
+//[LGE_CHANGE_E] seungmoon.lee@lge.com, 2012-02-29
 #ifdef IMPLEMENT_AS_CHAR_DRIVER
 static int 		g_nMajor = 0;
 #endif
@@ -93,17 +100,27 @@ static int 		open(	struct inode *inode, 	struct file *file										);
 static int 		release(	struct inode *inode, 	struct file *file										);
 static ssize_t 	read(	struct file *file, 	char *buf, 		size_t count, 		loff_t *ppos		);
 static ssize_t 	write(	struct file *file, 	const char *buf, 	size_t count, 		loff_t *ppos		);
-static int 		ioctl(		struct inode *inode, 	struct file *file, 	unsigned int cmd, 	unsigned long arg	);
-
-static struct 	file_operations fops = 
+//[LGE_CHANGE_S] seungmoon.lee@lge.com, 2012-02-29
+#if HAVE_UNLOCKED_IOCTL
+static long unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+#else
+static int ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg);
+#endif
+static struct file_operations fops = 
 {
-	.owner	=	THIS_MODULE,
-    	.read 	=     	read,
-    	.write 	=    	write,
-    	.ioctl 	=    	ioctl,
-    	.open 	=     	open,
-    	.release 	=  	release
+    .owner =            THIS_MODULE,
+    .read =             read,
+    .write =            write,
+#if HAVE_UNLOCKED_IOCTL
+    .unlocked_ioctl =   unlocked_ioctl,
+#else
+    .ioctl =            ioctl,
+#endif
+    .open =             open,
+    .release =          release,
+    .llseek =           default_llseek    /* using default implementation as declared in linux/fs.h */
 };
+//[LGE_CHANGE_E] seungmoon.lee@lge.com, 2012-02-29
 
 #ifndef IMPLEMENT_AS_CHAR_DRIVER
 static struct miscdevice miscdev = 
@@ -143,12 +160,26 @@ MODULE_AUTHOR(		"Immersion Corporation"		);
 MODULE_DESCRIPTION(	"TouchSense Kernel Module"	);
 MODULE_LICENSE(		"GPL v2"					);
 
+static inline unsigned long time_ms(void)
+{
+	unsigned long long t;
+	unsigned long nanosec_rem;
+	static volatile unsigned int printk_cpu = UINT_MAX;
+	
+	printk_cpu = smp_processor_id();
+	
+	t = cpu_clock(printk_cpu);
+	nanosec_rem = do_div(t, 1000000000);
+	
+	return ((t * 1000) + (nanosec_rem / 1000000));
+}
+
 int __init tspdrv_init( void )
 {
 
 	int 	nRet, i;   /* initialized below */
 
-	DbgOut( ( "tspdrv: init_module.\n" ) );
+	DbgOut( ( "[SHYUN] tspdrv: init_module.\n" ) );
 
 #ifdef IMPLEMENT_AS_CHAR_DRIVER
 	g_nMajor = register_chrdev( 0, MODULE_NAME, &fops );
@@ -279,7 +310,6 @@ static ssize_t read( struct file *file, char *buf, size_t count, loff_t *ppos )
 
 static ssize_t write( struct file *file, const char *buf, size_t count, loff_t *ppos )
 {
-
     	int i = 0;
 
     	*ppos = 0;  /* file position not used, always set to 0 */
@@ -388,10 +418,16 @@ static ssize_t write( struct file *file, const char *buf, size_t count, loff_t *
     	return count;
 
 }
-
-static int ioctl( struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg )
+//[LGE_CHANGE_S] seungmoon.lee@lge.com, 2012-02-29
+#if HAVE_UNLOCKED_IOCTL
+static long unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+#else
+static int ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
+#endif
+//[LGE_CHANGE_E] seungmoon.lee@lge.com, 2012-02-29
 {
-
+	static int enabled = 0;
+	static unsigned long enable_time = -1, disable_time = -1;
 #ifdef QA_TEST
     	int i;
 #endif
@@ -423,7 +459,6 @@ static int ioctl( struct inode *inode, struct file *file, unsigned int cmd, unsi
             		g_nTime = 0;
             		g_nForceLogIndex = 0;
 #endif
-			g_bIsPlaying = false;
             		break;
 
         	case TSPDRV_MAGIC_NUMBER:
@@ -431,9 +466,12 @@ static int ioctl( struct inode *inode, struct file *file, unsigned int cmd, unsi
             		break;
 
         	case TSPDRV_ENABLE_AMP:
-            		ImmVibeSPI_ForceOut_AmpEnable( arg );
+					ImmVibeSPI_ForceOut_AmpEnable( arg );
+					enable_time = time_ms();
+					//printk("VIB Enable\n");
             		DbgRecorderReset( ( arg ) );
             		DbgRecord( ( arg,";------- TSPDRV_ENABLE_AMP ---------\n" ) );
+					enabled = 1;
             		break;
 
         	case TSPDRV_DISABLE_AMP:
@@ -441,6 +479,9 @@ static int ioctl( struct inode *inode, struct file *file, unsigned int cmd, unsi
             		/* If a stop was requested, ignore the request as the amp will be disabled by the timer proc when it's ready */
             		if( ! g_bStopRequested ) {
                 		ImmVibeSPI_ForceOut_AmpDisable( arg );
+						enabled = 0;
+						disable_time = time_ms();	
+						//printk("VIB Disable [%lu][!req=%d]\n", (disable_time - enable_time), !g_bStopRequested);
             		}
             		break;
 

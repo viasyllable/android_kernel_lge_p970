@@ -66,7 +66,9 @@ static struct lp8720_platform_data lp8720_pdata = {
 
 #define ISP_IMX072_MCLK		216000000
 
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.07.26] - CAM
 #define ISP_YACD5B1S_MCLK		216000000
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.07.26] - CAM
 
 /* Sensor specific GPIO signals */
 #define IMX072_RESET_GPIO  	98
@@ -101,14 +103,23 @@ static struct lp8720_platform_data lp8720_pdata = {
 #define IMX072_BIGGEST_FRAME_BYTE_SIZE	PAGE_ALIGN(2608 * 1960 * 2)
 #endif
 
+
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.07.26] - CAM
 #if defined(CONFIG_VIDEO_YACD5B1S) || defined(CONFIG_VIDEO_YACD5B1S_MODULE)
 #include <../drivers/media/video/yacd5b1s.h>
 #endif
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.07.26] - CAM
 
 #if defined(CONFIG_REGULATOR_LP8720)
 extern void subpm_set_output(subpm_output_enum outnum, int onoff);
 extern void subpm_output_enable(void);
 #endif
+
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2012.05.22] - CAM
+static struct pm_qos_request_list pm_qos_handler;
+#define SET_MPU_CONSTRAINT         12
+#define CLEAR_MPU_CONSTRAINT       -1
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2012.05.22] - CAM
 
 #if defined(CONFIG_VIDEO_IMX072) || defined(CONFIG_VIDEO_IMX072_MODULE)
 
@@ -163,9 +174,6 @@ static int imx072_sensor_power_set(struct v4l2_int_device *s, enum v4l2_power po
 	struct isp_csi2_lanes_cfg lanecfg;
 	struct isp_csi2_phy_cfg phyconfig;
 	static enum v4l2_power previous_power = V4L2_POWER_OFF;
-// 20110426 prime@sdcmicro.com Update omap_pm_set_max_mpu_wakeup_lat()  for 2.6.35 kernel [START]
-	static struct pm_qos_request_list *qos_request;
-// 20110426 prime@sdcmicro.com Update omap_pm_set_max_mpu_wakeup_lat()  for 2.6.35 kernel [END]
 	int err = 0;
 
 	switch (power) {
@@ -182,10 +190,10 @@ static int imx072_sensor_power_set(struct v4l2_int_device *s, enum v4l2_power po
 					 OCP_INITIATOR_AGENT, 800000);
 
 		/* Hold a constraint to keep MPU in C1 */
-// 20110426 prime@sdcmicro.com Update omap_pm_set_max_mpu_wakeup_lat()  for 2.6.35 kernel [START]
-		//omap_pm_set_max_mpu_wakeup_lat(vdev->cam->isp, 12);
- 		omap_pm_set_max_mpu_wakeup_lat(&qos_request, 12);  /* 20110527 dongyu.gwak@lge.com camera l3 clock*/
-// 20110426 prime@sdcmicro.com Update omap_pm_set_max_mpu_wakeup_lat()  for 2.6.35 kernel [END]
+		//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2012.05.22] - CAM
+		pm_qos_update_request(&pm_qos_handler,
+							SET_MPU_CONSTRAINT);
+		//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2012.05.22] - CAM
 
 		isp_csi2_reset(&isp->isp_csi2);
 
@@ -249,20 +257,48 @@ static int imx072_sensor_power_set(struct v4l2_int_device *s, enum v4l2_power po
 
 		break;
 	case V4L2_POWER_OFF:
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.07.26] - CAM
 		printk(KERN_DEBUG "imx072_sensor_power_set(OFF)\n");
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.07.26] - CAM
 		subpm_set_output(LDO5,0);
 		subpm_output_enable();
         gpio_set_value(DW9716_VCM_ENABLE, 0);
 
-        isp_disable_mclk(isp);
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.07.26] - CAM
+		/* This is not required cuz it is disabled in isp_csi_memvs.c*/
+		/* isp_disable_mclk(isp); */
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.07.26] - CAM
+
         isp_csi2_complexio_power(&isp->isp_csi2, ISP_CSI2_POWER_OFF);
         isp_csi2_reset(&isp->isp_csi2);
         isp_csi2_ctrl_config_ecc_enable(&isp->isp_csi2, true);
         isp_csi2_complexio_power(&isp->isp_csi2, ISP_CSI2_POWER_OFF);
-        isp_disable_mclk(isp);
 		break;	
 		
 	case V4L2_POWER_STANDBY:
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.07.26] - CAM
+  #ifdef CONFIG_OMAP2_DSS_HDMI    
+  {
+    extern int hdmi_power_initialize;
+    int hdmi_wait_cnt = 0;
+    for(hdmi_wait_cnt = 0; hdmi_wait_cnt<20; hdmi_wait_cnt++)
+    {
+      if (hdmi_power_initialize== 0)
+      {
+        printk("==========================================================\n");
+        printk("waiting DONE for HDMI : %d looping \n", hdmi_wait_cnt);
+        printk("==========================================================\n");
+        break;
+      }
+      printk("==========================================================\n");
+      printk("HDMI is not done yet...waiting for HDMI DONE : %d looping \n", hdmi_wait_cnt);
+      printk("==========================================================\n");
+      msleep(100);
+    }
+  }
+  #endif
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.07.26] - CAM
+
 		printk(KERN_DEBUG "imx072_sensor_power_set(%s)\n",
 			(power == V4L2_POWER_OFF) ? "OFF" : "STANDBY");
 		/* Power Down Sequence */
@@ -281,16 +317,11 @@ static int imx072_sensor_power_set(struct v4l2_int_device *s, enum v4l2_power po
 		gpio_free(IMX072_RESET_GPIO);
 
 		/* Remove pm constraints */
-		omap_pm_set_min_bus_tput(vdev->cam->isp, OCP_INITIATOR_AGENT, 0);
-// 20110426 prime@sdcmicro.com Update omap_pm_set_max_mpu_wakeup_lat()  for 2.6.35 kernel [START]
-		//omap_pm_set_max_mpu_wakeup_lat(vdev->cam->isp, -1);
-		omap_pm_set_max_mpu_wakeup_lat(&qos_request, -1);
-// 20110426 prime@sdcmicro.com Update omap_pm_set_max_mpu_wakeup_lat()  for 2.6.35 kernel [END]
-
-		/* Make sure not to disable the MCLK twice in a row */
-		if (previous_power == V4L2_POWER_ON)
-			isp_disable_mclk(isp);
-
+		//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2012.05.22] - CAM		
+		omap_pm_set_min_bus_tput(vdev->cam->isp, OCP_INITIATOR_AGENT, -1);
+		pm_qos_update_request(&pm_qos_handler,
+							CLEAR_MPU_CONSTRAINT);
+		//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2012.05.22] - CAM	
 		break;
 	}
 
@@ -302,6 +333,14 @@ static int imx072_sensor_power_set(struct v4l2_int_device *s, enum v4l2_power po
 static u32 imx072_sensor_set_xclk(struct v4l2_int_device *s, u32 xclkfreq)
 {
 	struct omap34xxcam_videodev *vdev = s->u.slave->master->priv;
+	struct isp_device *isp = dev_get_drvdata(vdev->cam->isp);
+
+	/* Enable/Disable sensor xclk */
+	if (xclkfreq)
+		isp_enable_mclk(isp->dev);
+	else
+		isp_disable_mclk(isp);
+
 
 	return isp_set_xclk(vdev->cam->isp, xclkfreq, USE_XCLKA);
 }
@@ -466,6 +505,14 @@ static int rt8515_init(void)
 
 static int rt8515_exit(void)
 {
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.09.20] - CAM
+	gpio_set_value(RT8515_FLEN_GPIO, 0);
+	gpio_set_value(RT8515_ENSET_S2C_GPIO, 0);
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.10.20] - CAM : remove
+//	gpio_set_value(RT8515_FLINH_GPIO, 0);
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.10.20] - CAM : remove
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.09.20] - CAM	
+	
  	gpio_free(RT8515_FLEN_GPIO);
 	gpio_free(RT8515_ENSET_S2C_GPIO);
 
@@ -541,6 +588,8 @@ struct rt8515_platform_data hub_rt8515_data = {
 
 #endif
 
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.07.26] - CAM
+// for the secondary sensor 
 #if defined(CONFIG_VIDEO_YACD5B1S) || defined(CONFIG_VIDEO_YACD5B1S_MODULE)
 
 static struct omap34xxcam_sensor_config yacd5b1s_hwc = {
@@ -583,10 +632,6 @@ static int yacd5b1s_sensor_power_set(struct v4l2_int_device *dev, enum v4l2_powe
 	struct omap34xxcam_videodev *vdev = dev->u.slave->master->priv;
 	struct isp_device *isp = dev_get_drvdata(vdev->cam->isp);
 	static enum v4l2_power previous_power = V4L2_POWER_OFF;
-// 20110426 prime@sdcmicro.com Update omap_pm_set_max_mpu_wakeup_lat()  for 2.6.35 kernel [START]
-	static struct pm_qos_request_list *qos_request;
-// 20110426 prime@sdcmicro.com Update omap_pm_set_max_mpu_wakeup_lat()  for 2.6.35 kernel [END]
-
 	int err = 0;
 
 	switch (power) {
@@ -594,12 +639,18 @@ static int yacd5b1s_sensor_power_set(struct v4l2_int_device *dev, enum v4l2_powe
 		/* Power Up Sequence */
 		printk(KERN_DEBUG "yacd5b1s_sensor_power_set(ON)\n");
 
-
+		/*
+		 * Through-put requirement:
+		 * Set max OCP freq for 3630 is 200 MHz through-put
+		 * is in KByte/s so 200000 KHz * 4 = 800000 KByte/s
+		 */
 		omap_pm_set_min_bus_tput(vdev->cam->isp, OCP_INITIATOR_AGENT, 800000);
 
 		/* Hold a constraint to keep MPU in C1 */
-//		omap_pm_set_max_mpu_wakeup_lat(vdev->cam->isp, 12);
- 		omap_pm_set_max_mpu_wakeup_lat(&qos_request, 12);
+		//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2012.05.22] - CAM
+		pm_qos_update_request(&pm_qos_handler,
+							SET_MPU_CONSTRAINT);
+		//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2012.05.22] - CAM
 
 		isp_configure_interface(vdev->cam->isp,&yacd5b1s_if_config);
 
@@ -643,7 +694,7 @@ static int yacd5b1s_sensor_power_set(struct v4l2_int_device *dev, enum v4l2_powe
 		mdelay(100);
 
 		udelay(50);
-		
+
 		gpio_direction_output(YACD5B1S_RESET_GPIO, true);
 		udelay(100);
 		gpio_set_value(YACD5B1S_RESET_GPIO, 0);
@@ -683,15 +734,12 @@ static int yacd5b1s_sensor_power_set(struct v4l2_int_device *dev, enum v4l2_powe
 		gpio_free(YACD5B1S_STANDBY_GPIO);
 		gpio_free(YACD5B1S_RESET_GPIO);
 		
-
-		omap_pm_set_min_bus_tput(vdev->cam->isp, OCP_INITIATOR_AGENT, 0);
-//		omap_pm_set_max_mpu_wakeup_lat(vdev->cam->isp, -1);
- 		omap_pm_set_max_mpu_wakeup_lat(&qos_request, -1);
-
-		if (previous_power == V4L2_POWER_ON){
-			isp_disable_mclk(isp);
-			udelay(5);
-        }
+		/* Remove pm constraints */
+		//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2012.05.22] - CAM		
+		omap_pm_set_min_bus_tput(vdev->cam->isp, OCP_INITIATOR_AGENT, -1);
+		pm_qos_update_request(&pm_qos_handler,
+							CLEAR_MPU_CONSTRAINT);
+		//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2012.05.22] - CAM  
 
 		break;
 		
@@ -705,10 +753,6 @@ static int yacd5b1s_sensor_power_set(struct v4l2_int_device *dev, enum v4l2_powe
 		gpio_free(YACD5B1S_STANDBY_GPIO);
 		gpio_free(YACD5B1S_RESET_GPIO);
 
-		if (previous_power == V4L2_POWER_ON){
-			isp_disable_mclk(isp);
-			udelay(5);
-        }
 
 		break;
 	}
@@ -721,6 +765,14 @@ static int yacd5b1s_sensor_power_set(struct v4l2_int_device *dev, enum v4l2_powe
 static u32 yacd5b1s_sensor_set_xclk(struct v4l2_int_device *s, u32 xclkfreq)
 {
 	struct omap34xxcam_videodev *vdev = s->u.slave->master->priv;
+	struct isp_device *isp = dev_get_drvdata(vdev->cam->isp);
+
+	/* Enable/Disable sensor xclk */
+	if (xclkfreq)
+		isp_enable_mclk(isp->dev);
+	else
+		isp_disable_mclk(isp);
+
 
 	return isp_set_xclk(vdev->cam->isp, xclkfreq, USE_XCLKB); // XCLK B 
 }
@@ -731,15 +783,18 @@ struct yacd5b1s_platform_data hub_yacd5b1s_platform_data = {
 	.set_xclk	= yacd5b1s_sensor_set_xclk,
 };	
 
-
-
 #endif //endif for the secondary sensor 
-
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.07.26] - CAM
 
 void __init hub_cam_init(void)
 {
 	printk("Camera_inited\n");
 	cam_inited = 0;
+		
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2012.05.22] - CAM
+	pm_qos_add_request(&pm_qos_handler, PM_QOS_CPU_DMA_LATENCY,
+						CLEAR_MPU_CONSTRAINT);
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2012.05.22] - CAM						
 		
 //	omap_mux_init_gpio(IMX072_RESET_GPIO, OMAP_PIN_OUTPUT);
 		
@@ -756,9 +811,16 @@ void __init hub_cam_init(void)
 	#endif
 		omap_mux_init_signal("gpio_98", OMAP_PIN_INPUT_PULLDOWN);
 		omap_mux_init_gpio(DW9716_VCM_ENABLE, OMAP_PIN_INPUT_PULLDOWN);
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.07.26] - CAM
+#if defined(CONFIG_VIDEO_YACD5B1S) || defined(CONFIG_VIDEO_YACD5B1S_MODULE)
 		omap_mux_init_gpio(YACD5B1S_RESET_GPIO, OMAP_PIN_INPUT_PULLDOWN);
 		omap_mux_init_gpio(YACD5B1S_STANDBY_GPIO, OMAP_PIN_INPUT_PULLDOWN);
-		//omap_mux_init_gpio(RT8515_FLINH_GPIO, OMAP_PIN_OUTPUT);  
+#endif
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.07.26] - CAM
+
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.10.20] - CAM : remove
+//		omap_mux_init_gpio(RT8515_FLINH_GPIO, OMAP_PIN_OUTPUT);  
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.10.20] - CAM : remove
 		omap_mux_init_gpio(RT8515_FLEN_GPIO, OMAP_PIN_OUTPUT);  
 		omap_mux_init_gpio(RT8515_ENSET_S2C_GPIO, OMAP_PIN_OUTPUT); 
 

@@ -6,7 +6,7 @@
  * Copyright (C) 2008 Texas Instruments, Inc.
  *
  * Contributors:
- * 	Atanas Filipov <afilipov@mm-sol.com>
+ *	Atanas Filipov <afilipov@mm-sol.com>
  *
  * This package is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as

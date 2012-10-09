@@ -44,7 +44,7 @@
 #define ISPH3A_PCR_AEW_EN	(1 << 16)
 #define ISPH3A_PCR_AEW_ALAW_EN	(1 << 17)
 #define ISPH3A_PCR_AEW_BUSY	(1 << 18)
-#define ISPH3A_PCR_AEW_MASK 	(ISPH3A_PCR_AEW_ALAW_EN | \
+#define ISPH3A_PCR_AEW_MASK	(ISPH3A_PCR_AEW_ALAW_EN | \
 				 ISPH3A_PCR_AEW_AVE2LMT_MASK)
 
 #define WRITE_SAT_LIM(reg, sat_limit)			\

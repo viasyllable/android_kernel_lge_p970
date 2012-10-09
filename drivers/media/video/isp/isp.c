@@ -8,11 +8,11 @@
  * Copyright (C) 2009 Nokia.
  *
  * Contributors:
- * 	Sameer Venkatraman <sameerv@ti.com>
- * 	Mohit Jalori <mjalori@ti.com>
- * 	Sergio Aguirre <saaguirre@ti.com>
- * 	Sakari Ailus <sakari.ailus@nokia.com>
- * 	Tuukka Toivonen <tuukka.o.toivonen@nokia.com>
+ *	Sameer Venkatraman <sameerv@ti.com>
+ *	Mohit Jalori <mjalori@ti.com>
+ *	Sergio Aguirre <saaguirre@ti.com>
+ *	Sakari Ailus <sakari.ailus@nokia.com>
+ *	Tuukka Toivonen <tuukka.o.toivonen@nokia.com>
  *	Toni Leinonen <toni.leinonen@nokia.com>
  *
  * This package is free software; you can redistribute it and/or modify
@@ -49,8 +49,6 @@
 #include "isp_dfs.h"
 #endif
 
-#define LG_FW_ISP_RESERVE /* 20110716 dongyu.gwak@lge.com reserve isp for camera */
-
 static struct platform_device *omap3isp_pdev;
 static int isp_complete_reset = 1;
 
@@ -61,7 +59,7 @@ static void isp_restore_ctx(struct device *dev);
 static void isp_buf_init(struct device *dev);
 
 /* List of image formats supported via OMAP ISP */
-const static struct v4l2_fmtdesc isp_formats[] = {
+static const struct v4l2_fmtdesc isp_formats[] = {
 	{
 		.description = "UYVY, packed",
 		.pixelformat = V4L2_PIX_FMT_UYVY,
@@ -199,12 +197,49 @@ static struct isp_reg isp_reg_list[] = {
  */
 #define REQ_EXP_MULTIPLIER 32
 static struct isp_freq_devider isp_ratio_factor[] = {
-	{  0, 32768, 0 * REQ_EXP_MULTIPLIER, 0 * REQ_EXP_MULTIPLIER },
-	{  2, 16384, 1 * REQ_EXP_MULTIPLIER, 1 * REQ_EXP_MULTIPLIER },
-	{  6,  8192, 2 * REQ_EXP_MULTIPLIER, 2 * REQ_EXP_MULTIPLIER },
-	{ 14,  4096, 3 * REQ_EXP_MULTIPLIER, 3 * REQ_EXP_MULTIPLIER },
-	{ 30,  2048, 4 * REQ_EXP_MULTIPLIER, 4 * REQ_EXP_MULTIPLIER }
+	{  0, 22938, 0 * REQ_EXP_MULTIPLIER, 0 * REQ_EXP_MULTIPLIER },
+	{  2, 11470, 1 * REQ_EXP_MULTIPLIER, 1 * REQ_EXP_MULTIPLIER },
+	{  6,  5734, 2 * REQ_EXP_MULTIPLIER, 2 * REQ_EXP_MULTIPLIER },
+	{ 14,  2868, 3 * REQ_EXP_MULTIPLIER, 3 * REQ_EXP_MULTIPLIER },
+	{ 30,  1434, 4 * REQ_EXP_MULTIPLIER, 4 * REQ_EXP_MULTIPLIER }
 };
+
+
+#if 0 // removed by MMS
+/**
+ * isp_validate_errata_i421 - Check errata i421
+ **/
+static int isp_validate_errata_i421(struct device *dev,
+				struct isph3a_aewb_config *aewb_cfg,
+				struct af_paxel *af_cfg)
+{
+	int i, num_cycles;
+	int aewb_width, aewb_cnt, af_width, af_cnt;
+
+	aewb_cnt = aewb_cfg->hor_win_count;
+	aewb_width = aewb_cfg->win_width;
+
+	/* Restore interface differences with AEWB interface */
+	af_cnt = af_cfg->hz_cnt + 1;
+	af_width = (af_cfg->width + 1) * 2;
+
+	for (i = 0; i <= af_cnt; i++) {
+		num_cycles = ((i + 1) * af_width) + 2;
+		num_cycles += af_cfg->hz_start - aewb_cfg->hor_win_start;
+
+		if ((num_cycles % aewb_width) == 0) {
+			dev_err(dev, "Preventing errata i421..."
+				     " Invalid AF paxel size, index %d\n", i);
+			return -EINVAL;
+		}
+
+		if ((num_cycles / aewb_width) >= aewb_cnt)
+			break;
+	}
+
+	return 0;
+}
+#endif
 
 /**
  * isp_get_upscale_ratio - Return ratio releated to the current crop.
@@ -819,7 +854,7 @@ int isp_configure_interface(struct device *dev,
 	ispccdc_set_raw_offset(&isp->isp_ccdc, config->raw_fmt_in);
 
 	isp->mclk = config->cam_mclk;
-	isp_enable_mclk(dev);
+	//isp_enable_mclk(dev);  // removed by MMS
 
 	isp_adjust_bandwidth(dev);
 
@@ -873,12 +908,12 @@ static irqreturn_t isp_isr(int irq, void *_pdev)
 	int wait_hs_vs = 0;
 	int ret;
 
+	irqstatus = isp_reg_readl(dev, OMAP3_ISP_IOMEM_MAIN, ISP_IRQ0STATUS);
+	isp_reg_writel(dev, irqstatus, OMAP3_ISP_IOMEM_MAIN, ISP_IRQ0STATUS);
+
 	if ((isp->running == ISP_STOPPED) &&
 		!irqdis->isp_callbk[CBK_RESZ_DONE])
 		return IRQ_NONE;
-
-	irqstatus = isp_reg_readl(dev, OMAP3_ISP_IOMEM_MAIN, ISP_IRQ0STATUS);
-	isp_reg_writel(dev, irqstatus, OMAP3_ISP_IOMEM_MAIN, ISP_IRQ0STATUS);
 
 	irqenable = isp_reg_readl(dev, OMAP3_ISP_IOMEM_MAIN, ISP_IRQ0ENABLE);
 	irqstatus &= irqenable;
@@ -995,7 +1030,7 @@ static irqreturn_t isp_isr(int irq, void *_pdev)
 	if (irqstatus & LSC_PRE_ERR) {
 		/* Mark buffer faulty. */
 		buf->vb_state = VIDEOBUF_ERROR;
-		dev_dbg(dev, "lsc prefetch error \n");
+		dev_dbg(dev, "lsc prefetch error\n");
 	}
 
 	if (irqstatus & CSIA) {
@@ -1070,20 +1105,23 @@ static irqreturn_t isp_isr(int irq, void *_pdev)
 			isp_buf_process(dev, bufs);
 
 		if(CCDC_RESZ_CAPTURE(isp)) {
+			/* 20120628 jungyeal@lge.com resizer busy patch from mms  [START] */
+			int resizer_busy;
 			if (isp_wait(dev, ispccdc_busy, 0, 5000, &isp->isp_ccdc)) {
-				dev_info(dev, "\n\ncdc won't become idle!\n\n");
+				dev_info(dev, "\n\n ccdc won't become idle!\n\n");
 			}
-
-			if (ispresizer_busy(&isp->isp_res)) {
-				printk("resizer busy.\n");
-			} else if (!ISP_BUFS_IS_EMPTY(bufs)) {
+			resizer_busy = ispresizer_busy(&isp->isp_res);
+			if (!resizer_busy)
 				isp_buf_process(dev, bufs);
+			//else
+			//	printk("resizer busy 2.\n");
+			
+			if (!ISP_BUFS_IS_EMPTY(bufs) && !resizer_busy) { 
 				ispresizer_config_shadow_registers(&isp->isp_res);
 				ispresizer_enable(&isp->isp_res, 1);
 				ispccdc_enable(&isp->isp_ccdc, 1);
-			} else {
-				printk(" last buffer \n \n ");
 			}
+			/* 20120628 jungyeal@lge.com resizer busy patch from mms [END] */
 		} 
 
 		/* Enabling configured statistic modules */
@@ -1370,18 +1408,17 @@ static int __isp_disable_modules(struct device *dev, int suspend)
 {
 	struct isp_device *isp = dev_get_drvdata(dev);
 	unsigned long timeout = jiffies + ISP_STOP_TIMEOUT;
-	int reset = 1;
+	int reset = 1; // 0703 MMS patch : To fix VT preview issue in the AAT
 
 	/* We need to disble the first LSC module */
 	timeout = jiffies + ISP_STOP_TIMEOUT;
 	while (ispccdc_lsc_delay_stop(&isp->isp_ccdc)) {
 		if (time_after(jiffies, timeout)) {
-			printk(KERN_ERR "%s: can't stop lsc "
-					"disabling lsc anyway. \n", __func__);
+			printk(KERN_ERR "%s: can't stop lsc"
+					"disabling lsc anyway.\n", __func__);
 			reset = 1;
 			break;
 		}
-		msleep(1);
 	}
 	/* We can disable lsc now, If an error ocured during
 	 * stopping of the LSC sw reset the isp */
@@ -1415,7 +1452,6 @@ static int __isp_disable_modules(struct device *dev, int suspend)
 			reset = 1;
 			break;
 		}
-		msleep(1);
 	}
 
 	/* Let's stop CCDC now. */
@@ -1428,12 +1464,11 @@ static int __isp_disable_modules(struct device *dev, int suspend)
 			reset = 1;
 			break;
 		}
-		msleep(1);
 	}
 
 	if (!reset) {
 		DPRINTK_ISPCTRL(KERN_INFO
-			"(%s) isp_complete_reset \n", __func__);
+			"(%s) isp_complete_reset\n", __func__);
 		isp_complete_reset = 1;
 	}
 	isp_csi_if_enable(&isp->isp_csi, 0);
@@ -1609,7 +1644,14 @@ static int isp_try_pipeline(struct device *dev,
 			pipe->ccdc_in = CCDC_RAW_GBRG;
 		pipe->ccdc_out = CCDC_OTHERS_VP;
 		pipe->prv.in.path = PRV_RAW_CCDC;
-		
+		/* removed by MMS
+		if ((pix_output->width == 1280) &&
+		    (pix_output->height == 720)) {
+			pipe->modules = OMAP_ISP_PREVIEW |
+					OMAP_ISP_CCDC;
+			pipe->prv.out.path = PREVIEW_MEM;
+		} else {
+		*/
 			pipe->modules = OMAP_ISP_PREVIEW |
 					OMAP_ISP_RESIZER |
 					OMAP_ISP_CCDC;
@@ -1620,6 +1662,9 @@ static int isp_try_pipeline(struct device *dev,
 				pipe->prv.out.path = PREVIEW_RSZ;
 				pipe->rsz.in.path = RSZ_OTFLY_YUV;
 			}
+		/* removed by MMS
+		}
+		*/
 	} else {
 		pipe->modules = OMAP_ISP_CCDC;
 		if (pix_input->pixelformat == V4L2_PIX_FMT_SGRBG10 ||
@@ -1892,12 +1937,8 @@ static int isp_vbq_sync(struct videobuf_buffer *vb)
 	if (!vb->baddr || !dma || !dma->nr_pages ||
 	    dma->nr_pages > ISP_CACHE_FLUSH_PAGES_MAX)
 		flush_cache_all();
-	else {
-		dmac_inv_range((void *)vb->baddr,
-			       (void *)vb->baddr + vb->bsize);
+	else
 		outer_inv_range(vb->baddr, vb->baddr + vb->bsize);
-	}
-
 	return 0;
 }
 
@@ -2429,10 +2470,20 @@ int isp_handle_private(struct device *dev, struct mutex *vdev_mutex, int cmd,
 	case VIDIOC_PRIVATE_ISP_AEWB_CFG: {
 		struct isph3a_aewb_config *params;
 		params = (struct isph3a_aewb_config *)arg;
-
 		mutex_lock(vdev_mutex);
 		rval = isph3a_aewb_config(&isp->isp_h3a, params);
 		mutex_unlock(vdev_mutex);
+
+		/* removed by MMS 
+		if (rval)
+			return rval;
+
+		// Check errata i421 
+		if (isp->isp_af.enabled && params && params->aewb_enable) {
+			rval = isp_validate_errata_i421(dev, params,
+					&isp->isp_af.config.paxel_config);
+		}
+		*/
 	}
 		break;
 	case VIDIOC_PRIVATE_ISP_AEWB_REQ: {
@@ -2458,10 +2509,20 @@ int isp_handle_private(struct device *dev, struct mutex *vdev_mutex, int cmd,
 	case VIDIOC_PRIVATE_ISP_AF_CFG: {
 		struct af_configuration *params;
 		params = (struct af_configuration *)arg;
-
 		mutex_lock(vdev_mutex);
 		rval = isp_af_config(&isp->isp_af, params);
 		mutex_unlock(vdev_mutex);
+		/* removed by MMS 
+		if (rval)
+			return rval;
+
+		// Check errata i421 
+		if (isp->isp_h3a.enabled && params && params->af_config) {
+			rval = isp_validate_errata_i421(dev,
+					&isp->isp_h3a.aewb_config_local,
+					&params->paxel_config);
+		}
+		*/
 	}
 		break;
 	case VIDIOC_PRIVATE_ISP_AF_REQ: {
@@ -2609,13 +2670,11 @@ int isp_g_crop(struct device *dev, struct v4l2_crop *crop)
 		crop->c.height = isp->pipeline.ccdc_out_h;
 	}
 
-	if (isp->pipeline.modules & OMAP_ISP_PREVIEW){
+	if (isp->pipeline.modules & OMAP_ISP_PREVIEW)
 		crop->c = isp->pipeline.prv.out.crop;
-	}
 
-	if (isp->pipeline.modules & OMAP_ISP_RESIZER){
+	if (isp->pipeline.modules & OMAP_ISP_RESIZER)
 		crop->c = isp->pipeline.rsz.in.crop;
-	}
 
 	return 0;
 }
@@ -2921,6 +2980,61 @@ void isp_restore_context(struct device *dev, struct isp_reg *reg_list)
 		isp_reg_writel(dev, next->val, next->mmio_range, next->reg);
 }
 
+/**
+ * isp_remove - Remove ISP platform device
+ * @pdev: Pointer to ISP platform device
+ *
+ * Always returns 0.
+ **/
+static int isp_remove(struct platform_device *pdev)
+{
+	struct isp_device *isp = platform_get_drvdata(pdev);
+	int i;
+
+	if (!isp)
+		return 0;
+#ifdef CONFIG_VIDEO_OMAP34XX_ISP_DEBUG_FS
+	isp_dfs_shutdown();
+#endif
+	isp_csi2_cleanup(&pdev->dev);
+	isp_csi_cleanup(&pdev->dev);
+	isp_af_exit(&pdev->dev);
+	isp_resizer_cleanup(&pdev->dev);
+	isp_preview_cleanup(&pdev->dev);
+	isp_get();
+	if (isp->iommu)
+		iommu_put(isp->iommu);
+	isp_put();
+	isph3a_aewb_cleanup(&pdev->dev);
+	isp_hist_cleanup(&pdev->dev);
+	isp_ccdc_cleanup(&pdev->dev);
+
+	clk_put(isp->cam_ick);
+	clk_put(isp->cam_mclk);
+	clk_put(isp->dpll4_m5_ck);
+	clk_put(isp->csi2_fck);
+	clk_put(isp->l3_ick);
+
+	free_irq(isp->irq_num, isp);
+
+	for (i = 0; i <= OMAP3_ISP_IOMEM_CSI2PHY2; i++) {
+		if (isp->mmio_base[i]) {
+			iounmap((void *)isp->mmio_base[i]);
+			isp->mmio_base[i] = 0;
+		}
+
+		if (isp->mmio_base_phys[i]) {
+			release_mem_region(isp->mmio_base_phys[i],
+					   isp->mmio_size[i]);
+			isp->mmio_base_phys[i] = 0;
+		}
+	}
+
+	omap3isp_pdev = NULL;
+	kfree(isp);
+
+	return 0;
+}
 
 #ifdef CONFIG_PM
 
@@ -2984,7 +3098,7 @@ static int isp_resume(struct platform_device *pdev)
 	isp_resume_modules(&pdev->dev);
 
 out:
-	DPRINTK_ISPCTRL("isp_resume: done \n");
+	DPRINTK_ISPCTRL("isp_resume: done\n");
 
 	return ret_err;
 }
@@ -2995,28 +3109,6 @@ out:
 #define isp_resume	NULL
 
 #endif /* CONFIG_PM */
-
-#ifdef LG_FW_ISP_RESERVE /* 20110716 dongyu.gwak@lge.com reserve isp for camera */
-int isp_reserve = 0;
-static ssize_t isp_reserve_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-		int i;
-
-		sscanf(buf, "%d", &isp_reserve);
-		printk("%s: isp_reserve %d\n", __func__, isp_reserve);
-
-		return count;
-}
-
-static ssize_t isp_reserve_show(struct device *dev, struct device_attribute *attr,
-				char *buf)
-{
-		printk("%s: isp_reserve %d\n", __func__, isp_reserve);
-
-		return sprintf(buf, "%u\n", isp_reserve);
-}
-static DEVICE_ATTR(isp_reserve, S_IRUGO | S_IWUSR, isp_reserve_show, isp_reserve_store);
-#endif /*LG_FW_ISP_RESERVE*/
 
 static u64 raw_dmamask = DMA_BIT_MASK(32);
 
@@ -3167,17 +3259,8 @@ static int isp_probe(struct platform_device *pdev)
 	isp_get();
 	isp_power_settings(&pdev->dev, 1);
 	isp_put();
-#ifdef LG_FW_ISP_RESERVE /* 20110716 dongyu.gwak@lge.com reserve isp for camera */    
-	ret_err = device_create_file(&pdev->dev, &dev_attr_isp_reserve);
-    if (ret_err < 0)
-    	goto err_isp_reserve_create_file;
-#endif /*LG_FW_ISP_RESERVE*/
 
 	return 0;
-
-#ifdef LG_FW_ISP_RESERVE /* 20110716 dongyu.gwak@lge.com reserve isp for camera */
-err_isp_reserve_create_file:
-#endif /*LG_FW_ISP_RESERVE*/
 
 out_iommu_get:
 	free_irq(isp->irq_num, isp);
@@ -3210,65 +3293,6 @@ out_free_mmio:
 	return ret_err;
 }
 
-/**
- * isp_remove - Remove ISP platform device
- * @pdev: Pointer to ISP platform device
- *
- * Always returns 0.
- **/
-static int isp_remove(struct platform_device *pdev)
-{
-	struct isp_device *isp = platform_get_drvdata(pdev);
-	int i;
-
-	if (!isp)
-		return 0;
-#ifdef CONFIG_VIDEO_OMAP34XX_ISP_DEBUG_FS
-	isp_dfs_shutdown();
-#endif
-	isp_csi2_cleanup(&pdev->dev);
-	isp_csi_cleanup(&pdev->dev);
-	isp_af_exit(&pdev->dev);
-	isp_resizer_cleanup(&pdev->dev);
-	isp_preview_cleanup(&pdev->dev);
-	isp_get();
-	if (isp->iommu)
-		iommu_put(isp->iommu);
-	isp_put();
-	isph3a_aewb_cleanup(&pdev->dev);
-	isp_hist_cleanup(&pdev->dev);
-	isp_ccdc_cleanup(&pdev->dev);
-
-	clk_put(isp->cam_ick);
-	clk_put(isp->cam_mclk);
-	clk_put(isp->dpll4_m5_ck);
-	clk_put(isp->csi2_fck);
-	clk_put(isp->l3_ick);
-
-	free_irq(isp->irq_num, isp);
-
-	for (i = 0; i <= OMAP3_ISP_IOMEM_CSI2PHY2; i++) {
-		if (isp->mmio_base[i]) {
-			iounmap((void *)isp->mmio_base[i]);
-			isp->mmio_base[i] = 0;
-		}
-
-		if (isp->mmio_base_phys[i]) {
-			release_mem_region(isp->mmio_base_phys[i],
-					   isp->mmio_size[i]);
-			isp->mmio_base_phys[i] = 0;
-		}
-	}
-
-	omap3isp_pdev = NULL;
-	
-	kfree(isp);
-#ifdef LG_FW_ISP_RESERVE /* 20110716 dongyu.gwak@lge.com reserve isp for camera */
-	device_remove_file(&pdev->dev, &dev_attr_isp_reserve);
-#endif /*LG_FW_ISP_RESERVE*/
-		
-	return 0;
-}
 static struct platform_driver omap3isp_driver = {
 	.probe = isp_probe,
 	.remove = isp_remove,

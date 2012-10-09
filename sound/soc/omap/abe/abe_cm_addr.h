@@ -1,11 +1,16 @@
 /*
- * ALSA SoC OMAP ABE driver
-*
- * Author:          Laurent Le Faucheur <l-le-faucheur@ti.com>
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
+ *
+ * GPL LICENSE SUMMARY
+ *
+ * Copyright(c) 2010-2011 Texas Instruments Incorporated,
+ * All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,271 +19,203 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ * Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
+ * The full GNU General Public License is included in this distribution
+ * in the file called LICENSE.GPL.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2010-2011 Texas Instruments Incorporated,
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * * Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * * Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *   distribution.
+ * * Neither the name of Texas Instruments Incorporated nor the names of
+ *   its contributors may be used to endorse or promote products derived
+ *   from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef _ABE_CM_ADDR_H_
-#define _ABE_CM_ADDR_H_
-#define init_CM_ADDR                                        0
-#define init_CM_ADDR_END                                    310
-#define init_CM_sizeof                                      311
-#define C_Data_LSB_2_ADDR                                   311
-#define C_Data_LSB_2_ADDR_END                               311
-#define C_Data_LSB_2_sizeof                                 1
-#define C_1_Alpha_ADDR                                      312
-#define C_1_Alpha_ADDR_END                                  329
-#define C_1_Alpha_sizeof                                    18
-#define C_Alpha_ADDR                                        330
-#define C_Alpha_ADDR_END                                    347
-#define C_Alpha_sizeof                                      18
-#define C_GainsWRamp_ADDR                                   348
-#define C_GainsWRamp_ADDR_END                               361
-#define C_GainsWRamp_sizeof                                 14
-#define C_Gains_DL1M_ADDR                                   362
-#define C_Gains_DL1M_ADDR_END                               365
-#define C_Gains_DL1M_sizeof                                 4
-#define C_Gains_DL2M_ADDR                                   366
-#define C_Gains_DL2M_ADDR_END                               369
-#define C_Gains_DL2M_sizeof                                 4
-#define C_Gains_EchoM_ADDR                                  370
-#define C_Gains_EchoM_ADDR_END                              371
-#define C_Gains_EchoM_sizeof                                2
-#define C_Gains_SDTM_ADDR                                   372
-#define C_Gains_SDTM_ADDR_END                               373
-#define C_Gains_SDTM_sizeof                                 2
-#define C_Gains_VxRecM_ADDR                                 374
-#define C_Gains_VxRecM_ADDR_END                             377
-#define C_Gains_VxRecM_sizeof                               4
-#define C_Gains_ULM_ADDR                                    378
-#define C_Gains_ULM_ADDR_END                                381
-#define C_Gains_ULM_sizeof                                  4
-#define C_Gains_BTUL_ADDR                                   382
-#define C_Gains_BTUL_ADDR_END                               383
-#define C_Gains_BTUL_sizeof                                 2
-#define C_SDT_Coefs_ADDR                                    384
-#define C_SDT_Coefs_ADDR_END                                392
-#define C_SDT_Coefs_sizeof                                  9
-#define C_CoefASRC1_VX_ADDR                                 393
-#define C_CoefASRC1_VX_ADDR_END                             411
-#define C_CoefASRC1_VX_sizeof                               19
-#define C_CoefASRC2_VX_ADDR                                 412
-#define C_CoefASRC2_VX_ADDR_END                             430
-#define C_CoefASRC2_VX_sizeof                               19
-#define C_CoefASRC3_VX_ADDR                                 431
-#define C_CoefASRC3_VX_ADDR_END                             449
-#define C_CoefASRC3_VX_sizeof                               19
-#define C_CoefASRC4_VX_ADDR                                 450
-#define C_CoefASRC4_VX_ADDR_END                             468
-#define C_CoefASRC4_VX_sizeof                               19
-#define C_CoefASRC5_VX_ADDR                                 469
-#define C_CoefASRC5_VX_ADDR_END                             487
-#define C_CoefASRC5_VX_sizeof                               19
-#define C_CoefASRC6_VX_ADDR                                 488
-#define C_CoefASRC6_VX_ADDR_END                             506
-#define C_CoefASRC6_VX_sizeof                               19
-#define C_CoefASRC7_VX_ADDR                                 507
-#define C_CoefASRC7_VX_ADDR_END                             525
-#define C_CoefASRC7_VX_sizeof                               19
-#define C_CoefASRC8_VX_ADDR                                 526
-#define C_CoefASRC8_VX_ADDR_END                             544
-#define C_CoefASRC8_VX_sizeof                               19
-#define C_CoefASRC9_VX_ADDR                                 545
-#define C_CoefASRC9_VX_ADDR_END                             563
-#define C_CoefASRC9_VX_sizeof                               19
-#define C_CoefASRC10_VX_ADDR                                564
-#define C_CoefASRC10_VX_ADDR_END                            582
-#define C_CoefASRC10_VX_sizeof                              19
-#define C_CoefASRC11_VX_ADDR                                583
-#define C_CoefASRC11_VX_ADDR_END                            601
-#define C_CoefASRC11_VX_sizeof                              19
-#define C_CoefASRC12_VX_ADDR                                602
-#define C_CoefASRC12_VX_ADDR_END                            620
-#define C_CoefASRC12_VX_sizeof                              19
-#define C_CoefASRC13_VX_ADDR                                621
-#define C_CoefASRC13_VX_ADDR_END                            639
-#define C_CoefASRC13_VX_sizeof                              19
-#define C_CoefASRC14_VX_ADDR                                640
-#define C_CoefASRC14_VX_ADDR_END                            658
-#define C_CoefASRC14_VX_sizeof                              19
-#define C_CoefASRC15_VX_ADDR                                659
-#define C_CoefASRC15_VX_ADDR_END                            677
-#define C_CoefASRC15_VX_sizeof                              19
-#define C_CoefASRC16_VX_ADDR                                678
-#define C_CoefASRC16_VX_ADDR_END                            696
-#define C_CoefASRC16_VX_sizeof                              19
-#define C_AlphaCurrent_UL_VX_ADDR                           697
-#define C_AlphaCurrent_UL_VX_ADDR_END                       697
-#define C_AlphaCurrent_UL_VX_sizeof                         1
-#define C_BetaCurrent_UL_VX_ADDR                            698
-#define C_BetaCurrent_UL_VX_ADDR_END                        698
-#define C_BetaCurrent_UL_VX_sizeof                          1
-#define C_AlphaCurrent_DL_VX_ADDR                           699
-#define C_AlphaCurrent_DL_VX_ADDR_END                       699
-#define C_AlphaCurrent_DL_VX_sizeof                         1
-#define C_BetaCurrent_DL_VX_ADDR                            700
-#define C_BetaCurrent_DL_VX_ADDR_END                        700
-#define C_BetaCurrent_DL_VX_sizeof                          1
-#define C_CoefASRC1_MM_ADDR                                 701
-#define C_CoefASRC1_MM_ADDR_END                             718
-#define C_CoefASRC1_MM_sizeof                               18
-#define C_CoefASRC2_MM_ADDR                                 719
-#define C_CoefASRC2_MM_ADDR_END                             736
-#define C_CoefASRC2_MM_sizeof                               18
-#define C_CoefASRC3_MM_ADDR                                 737
-#define C_CoefASRC3_MM_ADDR_END                             754
-#define C_CoefASRC3_MM_sizeof                               18
-#define C_CoefASRC4_MM_ADDR                                 755
-#define C_CoefASRC4_MM_ADDR_END                             772
-#define C_CoefASRC4_MM_sizeof                               18
-#define C_CoefASRC5_MM_ADDR                                 773
-#define C_CoefASRC5_MM_ADDR_END                             790
-#define C_CoefASRC5_MM_sizeof                               18
-#define C_CoefASRC6_MM_ADDR                                 791
-#define C_CoefASRC6_MM_ADDR_END                             808
-#define C_CoefASRC6_MM_sizeof                               18
-#define C_CoefASRC7_MM_ADDR                                 809
-#define C_CoefASRC7_MM_ADDR_END                             826
-#define C_CoefASRC7_MM_sizeof                               18
-#define C_CoefASRC8_MM_ADDR                                 827
-#define C_CoefASRC8_MM_ADDR_END                             844
-#define C_CoefASRC8_MM_sizeof                               18
-#define C_CoefASRC9_MM_ADDR                                 845
-#define C_CoefASRC9_MM_ADDR_END                             862
-#define C_CoefASRC9_MM_sizeof                               18
-#define C_CoefASRC10_MM_ADDR                                863
-#define C_CoefASRC10_MM_ADDR_END                            880
-#define C_CoefASRC10_MM_sizeof                              18
-#define C_CoefASRC11_MM_ADDR                                881
-#define C_CoefASRC11_MM_ADDR_END                            898
-#define C_CoefASRC11_MM_sizeof                              18
-#define C_CoefASRC12_MM_ADDR                                899
-#define C_CoefASRC12_MM_ADDR_END                            916
-#define C_CoefASRC12_MM_sizeof                              18
-#define C_CoefASRC13_MM_ADDR                                917
-#define C_CoefASRC13_MM_ADDR_END                            934
-#define C_CoefASRC13_MM_sizeof                              18
-#define C_CoefASRC14_MM_ADDR                                935
-#define C_CoefASRC14_MM_ADDR_END                            952
-#define C_CoefASRC14_MM_sizeof                              18
-#define C_CoefASRC15_MM_ADDR                                953
-#define C_CoefASRC15_MM_ADDR_END                            970
-#define C_CoefASRC15_MM_sizeof                              18
-#define C_CoefASRC16_MM_ADDR                                971
-#define C_CoefASRC16_MM_ADDR_END                            988
-#define C_CoefASRC16_MM_sizeof                              18
-#define C_AlphaCurrent_MM_EXT_IN_ADDR                       989
-#define C_AlphaCurrent_MM_EXT_IN_ADDR_END                   989
-#define C_AlphaCurrent_MM_EXT_IN_sizeof                     1
-#define C_BetaCurrent_MM_EXT_IN_ADDR                        990
-#define C_BetaCurrent_MM_EXT_IN_ADDR_END                    990
-#define C_BetaCurrent_MM_EXT_IN_sizeof                      1
-#define C_DL2_L_Coefs_ADDR                                  991
-#define C_DL2_L_Coefs_ADDR_END                              1015
-#define C_DL2_L_Coefs_sizeof                                25
-#define C_DL2_R_Coefs_ADDR                                  1016
-#define C_DL2_R_Coefs_ADDR_END                              1040
-#define C_DL2_R_Coefs_sizeof                                25
-#define C_DL1_Coefs_ADDR                                    1041
-#define C_DL1_Coefs_ADDR_END                                1065
-#define C_DL1_Coefs_sizeof                                  25
-#define C_SRC_3_LP_Coefs_ADDR                               1066
-#define C_SRC_3_LP_Coefs_ADDR_END                           1076
-#define C_SRC_3_LP_Coefs_sizeof                             11
-#define C_SRC_3_LP_GAIN_Coefs_ADDR                          1077
-#define C_SRC_3_LP_GAIN_Coefs_ADDR_END                      1087
-#define C_SRC_3_LP_GAIN_Coefs_sizeof                        11
-#define C_SRC_3_HP_Coefs_ADDR                               1088
-#define C_SRC_3_HP_Coefs_ADDR_END                           1092
-#define C_SRC_3_HP_Coefs_sizeof                             5
-#define C_SRC_6_LP_Coefs_ADDR                               1093
-#define C_SRC_6_LP_Coefs_ADDR_END                           1103
-#define C_SRC_6_LP_Coefs_sizeof                             11
-#define C_SRC_6_LP_GAIN_Coefs_ADDR                          1104
-#define C_SRC_6_LP_GAIN_Coefs_ADDR_END                      1114
-#define C_SRC_6_LP_GAIN_Coefs_sizeof                        11
-#define C_SRC_6_HP_Coefs_ADDR                               1115
-#define C_SRC_6_HP_Coefs_ADDR_END                           1121
-#define C_SRC_6_HP_Coefs_sizeof                             7
-#define C_APS_DL1_coeffs1_ADDR                              1122
-#define C_APS_DL1_coeffs1_ADDR_END                          1130
-#define C_APS_DL1_coeffs1_sizeof                            9
-#define C_APS_DL1_M_coeffs2_ADDR                            1131
-#define C_APS_DL1_M_coeffs2_ADDR_END                        1133
-#define C_APS_DL1_M_coeffs2_sizeof                          3
-#define C_APS_DL1_C_coeffs2_ADDR                            1134
-#define C_APS_DL1_C_coeffs2_ADDR_END                        1136
-#define C_APS_DL1_C_coeffs2_sizeof                          3
-#define C_APS_DL2_L_coeffs1_ADDR                            1137
-#define C_APS_DL2_L_coeffs1_ADDR_END                        1145
-#define C_APS_DL2_L_coeffs1_sizeof                          9
-#define C_APS_DL2_R_coeffs1_ADDR                            1146
-#define C_APS_DL2_R_coeffs1_ADDR_END                        1154
-#define C_APS_DL2_R_coeffs1_sizeof                          9
-#define C_APS_DL2_L_M_coeffs2_ADDR                          1155
-#define C_APS_DL2_L_M_coeffs2_ADDR_END                      1157
-#define C_APS_DL2_L_M_coeffs2_sizeof                        3
-#define C_APS_DL2_R_M_coeffs2_ADDR                          1158
-#define C_APS_DL2_R_M_coeffs2_ADDR_END                      1160
-#define C_APS_DL2_R_M_coeffs2_sizeof                        3
-#define C_APS_DL2_L_C_coeffs2_ADDR                          1161
-#define C_APS_DL2_L_C_coeffs2_ADDR_END                      1163
-#define C_APS_DL2_L_C_coeffs2_sizeof                        3
-#define C_APS_DL2_R_C_coeffs2_ADDR                          1164
-#define C_APS_DL2_R_C_coeffs2_ADDR_END                      1166
-#define C_APS_DL2_R_C_coeffs2_sizeof                        3
-#define C_AlphaCurrent_ECHO_REF_ADDR                        1167
-#define C_AlphaCurrent_ECHO_REF_ADDR_END                    1167
-#define C_AlphaCurrent_ECHO_REF_sizeof                      1
-#define C_BetaCurrent_ECHO_REF_ADDR                         1168
-#define C_BetaCurrent_ECHO_REF_ADDR_END                     1168
-#define C_BetaCurrent_ECHO_REF_sizeof                       1
-#define C_APS_DL1_EQ_ADDR                                   1169
-#define C_APS_DL1_EQ_ADDR_END                               1177
-#define C_APS_DL1_EQ_sizeof                                 9
-#define C_APS_DL2_L_EQ_ADDR                                 1178
-#define C_APS_DL2_L_EQ_ADDR_END                             1186
-#define C_APS_DL2_L_EQ_sizeof                               9
-#define C_APS_DL2_R_EQ_ADDR                                 1187
-#define C_APS_DL2_R_EQ_ADDR_END                             1195
-#define C_APS_DL2_R_EQ_sizeof                               9
-#define C_Vibra2_consts_ADDR                                1196
-#define C_Vibra2_consts_ADDR_END                            1199
-#define C_Vibra2_consts_sizeof                              4
-#define C_Vibra1_coeffs_ADDR                                1200
-#define C_Vibra1_coeffs_ADDR_END                            1210
-#define C_Vibra1_coeffs_sizeof                              11
-#define C_48_96_LP_Coefs_ADDR                               1211
-#define C_48_96_LP_Coefs_ADDR_END                           1225
-#define C_48_96_LP_Coefs_sizeof                             15
-#define C_96_48_AMIC_Coefs_ADDR                             1226
-#define C_96_48_AMIC_Coefs_ADDR_END                         1244
-#define C_96_48_AMIC_Coefs_sizeof                           19
-#define C_96_48_DMIC_Coefs_ADDR                             1245
-#define C_96_48_DMIC_Coefs_ADDR_END                         1263
-#define C_96_48_DMIC_Coefs_sizeof                           19
-#define C_INPUT_SCALE_ADDR                                  1264
-#define C_INPUT_SCALE_ADDR_END                              1264
-#define C_INPUT_SCALE_sizeof                                1
-#define C_OUTPUT_SCALE_ADDR                                 1265
-#define C_OUTPUT_SCALE_ADDR_END                             1265
-#define C_OUTPUT_SCALE_sizeof                               1
-#define C_MUTE_SCALING_ADDR                                 1266
-#define C_MUTE_SCALING_ADDR_END                             1266
-#define C_MUTE_SCALING_sizeof                               1
-#define C_GAINS_0DB_ADDR                                    1267
-#define C_GAINS_0DB_ADDR_END                                1268
-#define C_GAINS_0DB_sizeof                                  2
-#define C_AlphaCurrent_BT_UL_ADDR                           1269
-#define C_AlphaCurrent_BT_UL_ADDR_END                       1269
-#define C_AlphaCurrent_BT_UL_sizeof                         1
-#define C_BetaCurrent_BT_UL_ADDR                            1270
-#define C_BetaCurrent_BT_UL_ADDR_END                        1270
-#define C_BetaCurrent_BT_UL_sizeof                          1
-#define C_AlphaCurrent_BT_DL_ADDR                           1271
-#define C_AlphaCurrent_BT_DL_ADDR_END                       1271
-#define C_AlphaCurrent_BT_DL_sizeof                         1
-#define C_BetaCurrent_BT_DL_ADDR                            1272
-#define C_BetaCurrent_BT_DL_ADDR_END                        1272
-#define C_BetaCurrent_BT_DL_sizeof                          1
-#endif /* _ABECM_ADDR_H_ */
+#define OMAP_ABE_INIT_CM_ADDR                              0x0
+#define OMAP_ABE_INIT_CM_SIZE                              0x640
+#define OMAP_ABE_C_DATA_LSB_2_ADDR                         0x640
+#define OMAP_ABE_C_DATA_LSB_2_SIZE                         0x4
+#define OMAP_ABE_C_1_ALPHA_ADDR                            0x644
+#define OMAP_ABE_C_1_ALPHA_SIZE                            0x48
+#define OMAP_ABE_C_ALPHA_ADDR                              0x68C
+#define OMAP_ABE_C_ALPHA_SIZE                              0x48
+#define OMAP_ABE_C_GAINSWRAMP_ADDR                         0x6D4
+#define OMAP_ABE_C_GAINSWRAMP_SIZE                         0x38
+#define OMAP_ABE_C_GAINS_DL1M_ADDR                         0x70C
+#define OMAP_ABE_C_GAINS_DL1M_SIZE                         0x10
+#define OMAP_ABE_C_GAINS_DL2M_ADDR                         0x71C
+#define OMAP_ABE_C_GAINS_DL2M_SIZE                         0x10
+#define OMAP_ABE_C_GAINS_ECHOM_ADDR                        0x72C
+#define OMAP_ABE_C_GAINS_ECHOM_SIZE                        0x8
+#define OMAP_ABE_C_GAINS_SDTM_ADDR                         0x734
+#define OMAP_ABE_C_GAINS_SDTM_SIZE                         0x8
+#define OMAP_ABE_C_GAINS_VXRECM_ADDR                       0x73C
+#define OMAP_ABE_C_GAINS_VXRECM_SIZE                       0x10
+#define OMAP_ABE_C_GAINS_ULM_ADDR                          0x74C
+#define OMAP_ABE_C_GAINS_ULM_SIZE                          0x10
+#define OMAP_ABE_C_GAINS_BTUL_ADDR                         0x75C
+#define OMAP_ABE_C_GAINS_BTUL_SIZE                         0x8
+#define OMAP_ABE_C_SDT_COEFS_ADDR                          0x764
+#define OMAP_ABE_C_SDT_COEFS_SIZE                          0x24
+#define OMAP_ABE_C_COEFASRC1_VX_ADDR                       0x788
+#define OMAP_ABE_C_COEFASRC1_VX_SIZE                       0x4C
+#define OMAP_ABE_C_COEFASRC2_VX_ADDR                       0x7D4
+#define OMAP_ABE_C_COEFASRC2_VX_SIZE                       0x4C
+#define OMAP_ABE_C_COEFASRC3_VX_ADDR                       0x820
+#define OMAP_ABE_C_COEFASRC3_VX_SIZE                       0x4C
+#define OMAP_ABE_C_COEFASRC4_VX_ADDR                       0x86C
+#define OMAP_ABE_C_COEFASRC4_VX_SIZE                       0x4C
+#define OMAP_ABE_C_COEFASRC5_VX_ADDR                       0x8B8
+#define OMAP_ABE_C_COEFASRC5_VX_SIZE                       0x4C
+#define OMAP_ABE_C_COEFASRC6_VX_ADDR                       0x904
+#define OMAP_ABE_C_COEFASRC6_VX_SIZE                       0x4C
+#define OMAP_ABE_C_COEFASRC7_VX_ADDR                       0x950
+#define OMAP_ABE_C_COEFASRC7_VX_SIZE                       0x4C
+#define OMAP_ABE_C_COEFASRC8_VX_ADDR                       0x99C
+#define OMAP_ABE_C_COEFASRC8_VX_SIZE                       0x4C
+#define OMAP_ABE_C_COEFASRC9_VX_ADDR                       0x9E8
+#define OMAP_ABE_C_COEFASRC9_VX_SIZE                       0x4C
+#define OMAP_ABE_C_COEFASRC10_VX_ADDR                      0xA34
+#define OMAP_ABE_C_COEFASRC10_VX_SIZE                      0x4C
+#define OMAP_ABE_C_COEFASRC11_VX_ADDR                      0xA80
+#define OMAP_ABE_C_COEFASRC11_VX_SIZE                      0x4C
+#define OMAP_ABE_C_COEFASRC12_VX_ADDR                      0xACC
+#define OMAP_ABE_C_COEFASRC12_VX_SIZE                      0x4C
+#define OMAP_ABE_C_COEFASRC13_VX_ADDR                      0xB18
+#define OMAP_ABE_C_COEFASRC13_VX_SIZE                      0x4C
+#define OMAP_ABE_C_COEFASRC14_VX_ADDR                      0xB64
+#define OMAP_ABE_C_COEFASRC14_VX_SIZE                      0x4C
+#define OMAP_ABE_C_COEFASRC15_VX_ADDR                      0xBB0
+#define OMAP_ABE_C_COEFASRC15_VX_SIZE                      0x4C
+#define OMAP_ABE_C_COEFASRC16_VX_ADDR                      0xBFC
+#define OMAP_ABE_C_COEFASRC16_VX_SIZE                      0x4C
+#define OMAP_ABE_C_ALPHACURRENT_UL_VX_ADDR                 0xC48
+#define OMAP_ABE_C_ALPHACURRENT_UL_VX_SIZE                 0x4
+#define OMAP_ABE_C_BETACURRENT_UL_VX_ADDR                  0xC4C
+#define OMAP_ABE_C_BETACURRENT_UL_VX_SIZE                  0x4
+#define OMAP_ABE_C_ALPHACURRENT_DL_VX_ADDR                 0xC50
+#define OMAP_ABE_C_ALPHACURRENT_DL_VX_SIZE                 0x4
+#define OMAP_ABE_C_BETACURRENT_DL_VX_ADDR                  0xC54
+#define OMAP_ABE_C_BETACURRENT_DL_VX_SIZE                  0x4
+#define OMAP_ABE_C_COEFASRC1_MM_ADDR                       0xC58
+#define OMAP_ABE_C_COEFASRC1_MM_SIZE                       0x48
+#define OMAP_ABE_C_COEFASRC2_MM_ADDR                       0xCA0
+#define OMAP_ABE_C_COEFASRC2_MM_SIZE                       0x48
+#define OMAP_ABE_C_COEFASRC3_MM_ADDR                       0xCE8
+#define OMAP_ABE_C_COEFASRC3_MM_SIZE                       0x48
+#define OMAP_ABE_C_COEFASRC4_MM_ADDR                       0xD30
+#define OMAP_ABE_C_COEFASRC4_MM_SIZE                       0x48
+#define OMAP_ABE_C_COEFASRC5_MM_ADDR                       0xD78
+#define OMAP_ABE_C_COEFASRC5_MM_SIZE                       0x48
+#define OMAP_ABE_C_COEFASRC6_MM_ADDR                       0xDC0
+#define OMAP_ABE_C_COEFASRC6_MM_SIZE                       0x48
+#define OMAP_ABE_C_COEFASRC7_MM_ADDR                       0xE08
+#define OMAP_ABE_C_COEFASRC7_MM_SIZE                       0x48
+#define OMAP_ABE_C_COEFASRC8_MM_ADDR                       0xE50
+#define OMAP_ABE_C_COEFASRC8_MM_SIZE                       0x48
+#define OMAP_ABE_C_COEFASRC9_MM_ADDR                       0xE98
+#define OMAP_ABE_C_COEFASRC9_MM_SIZE                       0x48
+#define OMAP_ABE_C_COEFASRC10_MM_ADDR                      0xEE0
+#define OMAP_ABE_C_COEFASRC10_MM_SIZE                      0x48
+#define OMAP_ABE_C_COEFASRC11_MM_ADDR                      0xF28
+#define OMAP_ABE_C_COEFASRC11_MM_SIZE                      0x48
+#define OMAP_ABE_C_COEFASRC12_MM_ADDR                      0xF70
+#define OMAP_ABE_C_COEFASRC12_MM_SIZE                      0x48
+#define OMAP_ABE_C_COEFASRC13_MM_ADDR                      0xFB8
+#define OMAP_ABE_C_COEFASRC13_MM_SIZE                      0x48
+#define OMAP_ABE_C_COEFASRC14_MM_ADDR                      0x1000
+#define OMAP_ABE_C_COEFASRC14_MM_SIZE                      0x48
+#define OMAP_ABE_C_COEFASRC15_MM_ADDR                      0x1048
+#define OMAP_ABE_C_COEFASRC15_MM_SIZE                      0x48
+#define OMAP_ABE_C_COEFASRC16_MM_ADDR                      0x1090
+#define OMAP_ABE_C_COEFASRC16_MM_SIZE                      0x48
+#define OMAP_ABE_C_ALPHACURRENT_MM_EXT_IN_ADDR             0x10D8
+#define OMAP_ABE_C_ALPHACURRENT_MM_EXT_IN_SIZE             0x4
+#define OMAP_ABE_C_BETACURRENT_MM_EXT_IN_ADDR              0x10DC
+#define OMAP_ABE_C_BETACURRENT_MM_EXT_IN_SIZE              0x4
+#define OMAP_ABE_C_DL2_L_COEFS_ADDR                        0x10E0
+#define OMAP_ABE_C_DL2_L_COEFS_SIZE                        0x64
+#define OMAP_ABE_C_DL2_R_COEFS_ADDR                        0x1144
+#define OMAP_ABE_C_DL2_R_COEFS_SIZE                        0x64
+#define OMAP_ABE_C_DL1_COEFS_ADDR                          0x11A8
+#define OMAP_ABE_C_DL1_COEFS_SIZE                          0x64
+#define OMAP_ABE_C_SRC_3_LP_COEFS_ADDR                     0x120C
+#define OMAP_ABE_C_SRC_3_LP_COEFS_SIZE                     0x34
+#define OMAP_ABE_C_SRC_3_LP_GAIN_COEFS_ADDR                0x1240
+#define OMAP_ABE_C_SRC_3_LP_GAIN_COEFS_SIZE                0x34
+#define OMAP_ABE_C_SRC_3_HP_COEFS_ADDR                     0x1274
+#define OMAP_ABE_C_SRC_3_HP_COEFS_SIZE                     0x14
+#define OMAP_ABE_C_SRC_6_LP_COEFS_ADDR                     0x1288
+#define OMAP_ABE_C_SRC_6_LP_COEFS_SIZE                     0x34
+#define OMAP_ABE_C_SRC_6_LP_GAIN_COEFS_ADDR                0x12BC
+#define OMAP_ABE_C_SRC_6_LP_GAIN_COEFS_SIZE                0x34
+#define OMAP_ABE_C_SRC_6_HP_COEFS_ADDR                     0x12F0
+#define OMAP_ABE_C_SRC_6_HP_COEFS_SIZE                     0x1C
+#define OMAP_ABE_C_ALPHACURRENT_ECHO_REF_ADDR              0x130C
+#define OMAP_ABE_C_ALPHACURRENT_ECHO_REF_SIZE              0x4
+#define OMAP_ABE_C_BETACURRENT_ECHO_REF_ADDR               0x1310
+#define OMAP_ABE_C_BETACURRENT_ECHO_REF_SIZE               0x4
+#define OMAP_ABE_C_VIBRA2_CONSTS_ADDR                      0x1314
+#define OMAP_ABE_C_VIBRA2_CONSTS_SIZE                      0x10
+#define OMAP_ABE_C_VIBRA1_COEFFS_ADDR                      0x1324
+#define OMAP_ABE_C_VIBRA1_COEFFS_SIZE                      0x2C
+#define OMAP_ABE_C_48_96_LP_COEFS_ADDR                     0x1350
+#define OMAP_ABE_C_48_96_LP_COEFS_SIZE                     0x3C
+#define OMAP_ABE_C_96_48_AMIC_COEFS_ADDR                   0x138C
+#define OMAP_ABE_C_96_48_AMIC_COEFS_SIZE                   0x4C
+#define OMAP_ABE_C_96_48_DMIC_COEFS_ADDR                   0x13D8
+#define OMAP_ABE_C_96_48_DMIC_COEFS_SIZE                   0x4C
+#define OMAP_ABE_C_INPUT_SCALE_ADDR                        0x1424
+#define OMAP_ABE_C_INPUT_SCALE_SIZE                        0x4
+#define OMAP_ABE_C_OUTPUT_SCALE_ADDR                       0x1428
+#define OMAP_ABE_C_OUTPUT_SCALE_SIZE                       0x4
+#define OMAP_ABE_C_MUTE_SCALING_ADDR                       0x142C
+#define OMAP_ABE_C_MUTE_SCALING_SIZE                       0x4
+#define OMAP_ABE_C_GAINS_0DB_ADDR                          0x1430
+#define OMAP_ABE_C_GAINS_0DB_SIZE                          0x8
+#define OMAP_ABE_C_ALPHACURRENT_BT_DL_ADDR                 0x1438
+#define OMAP_ABE_C_ALPHACURRENT_BT_DL_SIZE                 0x4
+#define OMAP_ABE_C_BETACURRENT_BT_DL_ADDR                  0x143C
+#define OMAP_ABE_C_BETACURRENT_BT_DL_SIZE                  0x4
+#define OMAP_ABE_C_ALPHACURRENT_BT_UL_ADDR                 0x1440
+#define OMAP_ABE_C_ALPHACURRENT_BT_UL_SIZE                 0x4
+#define OMAP_ABE_C_BETACURRENT_BT_UL_ADDR                  0x1444
+#define OMAP_ABE_C_BETACURRENT_BT_UL_SIZE                  0x4
+#define OMAP_ABE_C_SRC_FIR6_LP_GAIN_COEFS_ADDR             0x1448
+#define OMAP_ABE_C_SRC_FIR6_LP_GAIN_COEFS_SIZE             0x2A0
+#define OMAP_ABE_C_SRC_44P1_COEFS_ADDR                     0x16E8
+#define OMAP_ABE_C_SRC_44P1_COEFS_SIZE                     0x480
+#define OMAP_ABE_C_SRC_MM_DL_44P1_STEP_ADDR                0x1B68
+#define OMAP_ABE_C_SRC_MM_DL_44P1_STEP_SIZE                0x8
+#define OMAP_ABE_C_SRC_TONES_44P1_STEP_ADDR                0x1B70
+#define OMAP_ABE_C_SRC_TONES_44P1_STEP_SIZE                0x8
+#define OMAP_ABE_C_SRC_44P1_MULFAC2_ADDR                   0x1B78
+#define OMAP_ABE_C_SRC_44P1_MULFAC2_SIZE                   0x8
+#define OMAP_ABE_C_SRC_FIR12_LP_GAIN_COEFS_ADDR            0x1B80
+#define OMAP_ABE_C_SRC_FIR12_LP_GAIN_COEFS_SIZE            0x1E4
+#define OMAP_ABE_C_SRC_6_HP_NEW_COEFS_ADDR                 0x1D64
+#define OMAP_ABE_C_SRC_6_HP_NEW_COEFS_SIZE                 0x1C

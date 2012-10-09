@@ -379,4 +379,3 @@ MODULE_AUTHOR("Jan Engelhardt <jengelh@medozas.de>");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("ipt_quota2");
 MODULE_ALIAS("ip6t_quota2");
-

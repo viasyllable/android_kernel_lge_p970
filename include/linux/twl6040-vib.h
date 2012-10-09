@@ -21,7 +21,7 @@
 
 #ifdef __KERNEL__
 
-#define VIB_NAME "vib-twl6040"
+#define VIB_NAME "twl6040-vibra"
 
 #endif /* __KERNEL__ */
 

@@ -1,11 +1,16 @@
 /*
- * ALSA SoC OMAP ABE driver
-*
- * Author:          Laurent Le Faucheur <l-le-faucheur@ti.com>
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
+ * This file is provided under a dual BSD/GPLv2 license.  When using or
+ * redistributing this file, you may do so under either license.
+ *
+ * GPL LICENSE SUMMARY
+ *
+ * Copyright(c) 2010-2011 Texas Instruments Incorporated,
+ * All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
  *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,313 +19,227 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- * 02110-1301 USA
+ * Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
+ * The full GNU General Public License is included in this distribution
+ * in the file called LICENSE.GPL.
+ *
+ * BSD LICENSE
+ *
+ * Copyright(c) 2010-2011 Texas Instruments Incorporated,
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * * Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * * Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *   distribution.
+ * * Neither the name of Texas Instruments Incorporated nor the names of
+ *   its contributors may be used to endorse or promote products derived
+ *   from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef _ABE_DM_ADDR_H_
-#define _ABE_DM_ADDR_H_
-#define D_atcDescriptors_ADDR                               0
-#define D_atcDescriptors_ADDR_END                           511
-#define D_atcDescriptors_sizeof                             512
-#define stack_ADDR                                          512
-#define stack_ADDR_END                                      623
-#define stack_sizeof                                        112
-#define D_version_ADDR                                      624
-#define D_version_ADDR_END                                  627
-#define D_version_sizeof                                    4
-#define D_BT_DL_FIFO_ADDR                                   1024
-#define D_BT_DL_FIFO_ADDR_END                               1503
-#define D_BT_DL_FIFO_sizeof                                 480
-#define D_BT_UL_FIFO_ADDR                                   1536
-#define D_BT_UL_FIFO_ADDR_END                               2015
-#define D_BT_UL_FIFO_sizeof                                 480
-#define D_MM_EXT_OUT_FIFO_ADDR                              2048
-#define D_MM_EXT_OUT_FIFO_ADDR_END                          2527
-#define D_MM_EXT_OUT_FIFO_sizeof                            480
-#define D_MM_EXT_IN_FIFO_ADDR                               2560
-#define D_MM_EXT_IN_FIFO_ADDR_END                           3039
-#define D_MM_EXT_IN_FIFO_sizeof                             480
-#define D_MM_UL2_FIFO_ADDR                                  3072
-#define D_MM_UL2_FIFO_ADDR_END                              3551
-#define D_MM_UL2_FIFO_sizeof                                480
-#define D_VX_UL_FIFO_ADDR                                   3584
-#define D_VX_UL_FIFO_ADDR_END                               4063
-#define D_VX_UL_FIFO_sizeof                                 480
-#define D_VX_DL_FIFO_ADDR                                   4096
-#define D_VX_DL_FIFO_ADDR_END                               4575
-#define D_VX_DL_FIFO_sizeof                                 480
-#define D_DMIC_UL_FIFO_ADDR                                 4608
-#define D_DMIC_UL_FIFO_ADDR_END                             5087
-#define D_DMIC_UL_FIFO_sizeof                               480
-#define D_MM_UL_FIFO_ADDR                                   5120
-#define D_MM_UL_FIFO_ADDR_END                               5599
-#define D_MM_UL_FIFO_sizeof                                 480
-#define D_MM_DL_FIFO_ADDR                                   5632
-#define D_MM_DL_FIFO_ADDR_END                               6111
-#define D_MM_DL_FIFO_sizeof                                 480
-#define D_TONES_DL_FIFO_ADDR                                6144
-#define D_TONES_DL_FIFO_ADDR_END                            6623
-#define D_TONES_DL_FIFO_sizeof                              480
-#define D_VIB_DL_FIFO_ADDR                                  6656
-#define D_VIB_DL_FIFO_ADDR_END                              7135
-#define D_VIB_DL_FIFO_sizeof                                480
-#define D_McPDM_DL_FIFO_ADDR                                7168
-#define D_McPDM_DL_FIFO_ADDR_END                            7647
-#define D_McPDM_DL_FIFO_sizeof                              480
-#define D_McPDM_UL_FIFO_ADDR                                7680
-#define D_McPDM_UL_FIFO_ADDR_END                            8159
-#define D_McPDM_UL_FIFO_sizeof                              480
-#define D_DEBUG_FIFO_ADDR                                   8160
-#define D_DEBUG_FIFO_ADDR_END                               8255
-#define D_DEBUG_FIFO_sizeof                                 96
-#define D_DEBUG_FIFO_HAL_ADDR                               8256
-#define D_DEBUG_FIFO_HAL_ADDR_END                           8287
-#define D_DEBUG_FIFO_HAL_sizeof                             32
-#define D_IOdescr_ADDR                                      8288
-#define D_IOdescr_ADDR_END                                  8927
-#define D_IOdescr_sizeof                                    640
-#define d_zero_ADDR                                         8928
-#define d_zero_ADDR_END                                     8931
-#define d_zero_sizeof                                       4
-#define dbg_trace1_ADDR                                     8932
-#define dbg_trace1_ADDR_END                                 8932
-#define dbg_trace1_sizeof                                   1
-#define dbg_trace2_ADDR                                     8933
-#define dbg_trace2_ADDR_END                                 8933
-#define dbg_trace2_sizeof                                   1
-#define dbg_trace3_ADDR                                     8934
-#define dbg_trace3_ADDR_END                                 8934
-#define dbg_trace3_sizeof                                   1
-#define D_multiFrame_ADDR                                   8936
-#define D_multiFrame_ADDR_END                               9335
-#define D_multiFrame_sizeof                                 400
-#define D_tasksList_ADDR                                    9336
-#define D_tasksList_ADDR_END                                11383
-#define D_tasksList_sizeof                                  2048
-#define D_idleTask_ADDR                                     11384
-#define D_idleTask_ADDR_END                                 11385
-#define D_idleTask_sizeof                                   2
-#define D_typeLengthCheck_ADDR                              11386
-#define D_typeLengthCheck_ADDR_END                          11387
-#define D_typeLengthCheck_sizeof                            2
-#define D_maxTaskBytesInSlot_ADDR                           11388
-#define D_maxTaskBytesInSlot_ADDR_END                       11389
-#define D_maxTaskBytesInSlot_sizeof                         2
-#define D_rewindTaskBytes_ADDR                              11390
-#define D_rewindTaskBytes_ADDR_END                          11391
-#define D_rewindTaskBytes_sizeof                            2
-#define D_pCurrentTask_ADDR                                 11392
-#define D_pCurrentTask_ADDR_END                             11393
-#define D_pCurrentTask_sizeof                               2
-#define D_pFastLoopBack_ADDR                                11394
-#define D_pFastLoopBack_ADDR_END                            11395
-#define D_pFastLoopBack_sizeof                              2
-#define D_pNextFastLoopBack_ADDR                            11396
-#define D_pNextFastLoopBack_ADDR_END                        11399
-#define D_pNextFastLoopBack_sizeof                          4
-#define D_ppCurrentTask_ADDR                                11400
-#define D_ppCurrentTask_ADDR_END                            11401
-#define D_ppCurrentTask_sizeof                              2
-#define D_slotCounter_ADDR                                  11404
-#define D_slotCounter_ADDR_END                              11405
-#define D_slotCounter_sizeof                                2
-#define D_loopCounter_ADDR                                  11408
-#define D_loopCounter_ADDR_END                              11411
-#define D_loopCounter_sizeof                                4
-#define D_RewindFlag_ADDR                                   11412
-#define D_RewindFlag_ADDR_END                               11413
-#define D_RewindFlag_sizeof                                 2
-#define D_Slot23_ctrl_ADDR                                  11416
-#define D_Slot23_ctrl_ADDR_END                              11419
-#define D_Slot23_ctrl_sizeof                                4
-#define D_McuIrqFifo_ADDR                                   11420
-#define D_McuIrqFifo_ADDR_END                               11483
-#define D_McuIrqFifo_sizeof                                 64
-#define D_PingPongDesc_ADDR                                 11484
-#define D_PingPongDesc_ADDR_END                             11507
-#define D_PingPongDesc_sizeof                               24
-#define D_PP_MCU_IRQ_ADDR                                   11508
-#define D_PP_MCU_IRQ_ADDR_END                               11509
-#define D_PP_MCU_IRQ_sizeof                                 2
-#define D_ctrlPortFifo_ADDR                                 11520
-#define D_ctrlPortFifo_ADDR_END                             11535
-#define D_ctrlPortFifo_sizeof                               16
-#define D_Idle_State_ADDR                                   11536
-#define D_Idle_State_ADDR_END                               11539
-#define D_Idle_State_sizeof                                 4
-#define D_Stop_Request_ADDR                                 11540
-#define D_Stop_Request_ADDR_END                             11543
-#define D_Stop_Request_sizeof                               4
-#define D_Ref0_ADDR                                         11544
-#define D_Ref0_ADDR_END                                     11545
-#define D_Ref0_sizeof                                       2
-#define D_DebugRegister_ADDR                                11548
-#define D_DebugRegister_ADDR_END                            11687
-#define D_DebugRegister_sizeof                              140
-#define D_Gcount_ADDR                                       11688
-#define D_Gcount_ADDR_END                                   11689
-#define D_Gcount_sizeof                                     2
-#define D_DCcounter_ADDR                                    11692
-#define D_DCcounter_ADDR_END                                11695
-#define D_DCcounter_sizeof                                  4
-#define D_DCsum_ADDR                                        11696
-#define D_DCsum_ADDR_END                                    11703
-#define D_DCsum_sizeof                                      8
-#define D_fastCounter_ADDR                                  11704
-#define D_fastCounter_ADDR_END                              11707
-#define D_fastCounter_sizeof                                4
-#define D_slowCounter_ADDR                                  11708
-#define D_slowCounter_ADDR_END                              11711
-#define D_slowCounter_sizeof                                4
-#define D_aUplinkRouting_ADDR                               11712
-#define D_aUplinkRouting_ADDR_END                           11743
-#define D_aUplinkRouting_sizeof                             32
-#define D_VirtAudioLoop_ADDR                                11744
-#define D_VirtAudioLoop_ADDR_END                            11747
-#define D_VirtAudioLoop_sizeof                              4
-#define D_AsrcVars_DL_VX_ADDR                               11748
-#define D_AsrcVars_DL_VX_ADDR_END                           11779
-#define D_AsrcVars_DL_VX_sizeof                             32
-#define D_AsrcVars_UL_VX_ADDR                               11780
-#define D_AsrcVars_UL_VX_ADDR_END                           11811
-#define D_AsrcVars_UL_VX_sizeof                             32
-#define D_CoefAddresses_VX_ADDR                             11812
-#define D_CoefAddresses_VX_ADDR_END                         11843
-#define D_CoefAddresses_VX_sizeof                           32
-#define D_AsrcVars_MM_EXT_IN_ADDR                           11844
-#define D_AsrcVars_MM_EXT_IN_ADDR_END                       11875
-#define D_AsrcVars_MM_EXT_IN_sizeof                         32
-#define D_CoefAddresses_MM_ADDR                             11876
-#define D_CoefAddresses_MM_ADDR_END                         11907
-#define D_CoefAddresses_MM_sizeof                           32
-#define D_APS_DL1_M_thresholds_ADDR                         11908
-#define D_APS_DL1_M_thresholds_ADDR_END                     11915
-#define D_APS_DL1_M_thresholds_sizeof                       8
-#define D_APS_DL1_M_IRQ_ADDR                                11916
-#define D_APS_DL1_M_IRQ_ADDR_END                            11917
-#define D_APS_DL1_M_IRQ_sizeof                              2
-#define D_APS_DL1_C_IRQ_ADDR                                11918
-#define D_APS_DL1_C_IRQ_ADDR_END                            11919
-#define D_APS_DL1_C_IRQ_sizeof                              2
-#define D_TraceBufAdr_ADDR                                  11920
-#define D_TraceBufAdr_ADDR_END                              11921
-#define D_TraceBufAdr_sizeof                                2
-#define D_TraceBufOffset_ADDR                               11922
-#define D_TraceBufOffset_ADDR_END                           11923
-#define D_TraceBufOffset_sizeof                             2
-#define D_TraceBufLength_ADDR                               11924
-#define D_TraceBufLength_ADDR_END                           11925
-#define D_TraceBufLength_sizeof                             2
-#define D_AsrcVars_ECHO_REF_ADDR                            11928
-#define D_AsrcVars_ECHO_REF_ADDR_END                        11959
-#define D_AsrcVars_ECHO_REF_sizeof                          32
-#define D_Pempty_ADDR                                       11960
-#define D_Pempty_ADDR_END                                   11963
-#define D_Pempty_sizeof                                     4
-#define D_APS_DL2_L_M_IRQ_ADDR                              11964
-#define D_APS_DL2_L_M_IRQ_ADDR_END                          11965
-#define D_APS_DL2_L_M_IRQ_sizeof                            2
-#define D_APS_DL2_L_C_IRQ_ADDR                              11966
-#define D_APS_DL2_L_C_IRQ_ADDR_END                          11967
-#define D_APS_DL2_L_C_IRQ_sizeof                            2
-#define D_APS_DL2_R_M_IRQ_ADDR                              11968
-#define D_APS_DL2_R_M_IRQ_ADDR_END                          11969
-#define D_APS_DL2_R_M_IRQ_sizeof                            2
-#define D_APS_DL2_R_C_IRQ_ADDR                              11970
-#define D_APS_DL2_R_C_IRQ_ADDR_END                          11971
-#define D_APS_DL2_R_C_IRQ_sizeof                            2
-#define D_APS_DL1_C_thresholds_ADDR                         11972
-#define D_APS_DL1_C_thresholds_ADDR_END                     11979
-#define D_APS_DL1_C_thresholds_sizeof                       8
-#define D_APS_DL2_L_M_thresholds_ADDR                       11980
-#define D_APS_DL2_L_M_thresholds_ADDR_END                   11987
-#define D_APS_DL2_L_M_thresholds_sizeof                     8
-#define D_APS_DL2_L_C_thresholds_ADDR                       11988
-#define D_APS_DL2_L_C_thresholds_ADDR_END                   11995
-#define D_APS_DL2_L_C_thresholds_sizeof                     8
-#define D_APS_DL2_R_M_thresholds_ADDR                       11996
-#define D_APS_DL2_R_M_thresholds_ADDR_END                   12003
-#define D_APS_DL2_R_M_thresholds_sizeof                     8
-#define D_APS_DL2_R_C_thresholds_ADDR                       12004
-#define D_APS_DL2_R_C_thresholds_ADDR_END                   12011
-#define D_APS_DL2_R_C_thresholds_sizeof                     8
-#define D_ECHO_REF_48_16_WRAP_ADDR                          12012
-#define D_ECHO_REF_48_16_WRAP_ADDR_END                      12019
-#define D_ECHO_REF_48_16_WRAP_sizeof                        8
-#define D_ECHO_REF_48_8_WRAP_ADDR                           12020
-#define D_ECHO_REF_48_8_WRAP_ADDR_END                       12027
-#define D_ECHO_REF_48_8_WRAP_sizeof                         8
-#define D_BT_UL_16_48_WRAP_ADDR                             12028
-#define D_BT_UL_16_48_WRAP_ADDR_END                         12035
-#define D_BT_UL_16_48_WRAP_sizeof                           8
-#define D_BT_UL_8_48_WRAP_ADDR                              12036
-#define D_BT_UL_8_48_WRAP_ADDR_END                          12043
-#define D_BT_UL_8_48_WRAP_sizeof                            8
-#define D_BT_DL_48_16_WRAP_ADDR                             12044
-#define D_BT_DL_48_16_WRAP_ADDR_END                         12051
-#define D_BT_DL_48_16_WRAP_sizeof                           8
-#define D_BT_DL_48_8_WRAP_ADDR                              12052
-#define D_BT_DL_48_8_WRAP_ADDR_END                          12059
-#define D_BT_DL_48_8_WRAP_sizeof                            8
-#define D_VX_DL_16_48_WRAP_ADDR                             12060
-#define D_VX_DL_16_48_WRAP_ADDR_END                         12067
-#define D_VX_DL_16_48_WRAP_sizeof                           8
-#define D_VX_DL_8_48_WRAP_ADDR                              12068
-#define D_VX_DL_8_48_WRAP_ADDR_END                          12075
-#define D_VX_DL_8_48_WRAP_sizeof                            8
-#define D_VX_UL_48_16_WRAP_ADDR                             12076
-#define D_VX_UL_48_16_WRAP_ADDR_END                         12083
-#define D_VX_UL_48_16_WRAP_sizeof                           8
-#define D_VX_UL_48_8_WRAP_ADDR                              12084
-#define D_VX_UL_48_8_WRAP_ADDR_END                          12091
-#define D_VX_UL_48_8_WRAP_sizeof                            8
-#define D_APS_DL1_IRQs_WRAP_ADDR                            12092
-#define D_APS_DL1_IRQs_WRAP_ADDR_END                        12099
-#define D_APS_DL1_IRQs_WRAP_sizeof                          8
-#define D_APS_DL2_L_IRQs_WRAP_ADDR                          12100
-#define D_APS_DL2_L_IRQs_WRAP_ADDR_END                      12107
-#define D_APS_DL2_L_IRQs_WRAP_sizeof                        8
-#define D_APS_DL2_R_IRQs_WRAP_ADDR                          12108
-#define D_APS_DL2_R_IRQs_WRAP_ADDR_END                      12115
-#define D_APS_DL2_R_IRQs_WRAP_sizeof                        8
-#define D_nextMultiFrame_ADDR                               12116
-#define D_nextMultiFrame_ADDR_END                           12123
-#define D_nextMultiFrame_sizeof                             8
-#define D_HW_TEST_ADDR                                      12124
-#define D_HW_TEST_ADDR_END                                  12131
-#define D_HW_TEST_sizeof                                    8
-#define D_TraceBufAdr_HAL_ADDR                              12132
-#define D_TraceBufAdr_HAL_ADDR_END                          12135
-#define D_TraceBufAdr_HAL_sizeof                            4
-#define D_DEBUG_HAL_TASK_ADDR                               12288
-#define D_DEBUG_HAL_TASK_ADDR_END                           14335
-#define D_DEBUG_HAL_TASK_sizeof                             2048
-#define D_DEBUG_FW_TASK_ADDR                                14336
-#define D_DEBUG_FW_TASK_ADDR_END                            14591
-#define D_DEBUG_FW_TASK_sizeof                              256
-#define D_FwMemInit_ADDR                                    14592
-#define D_FwMemInit_ADDR_END                                15551
-#define D_FwMemInit_sizeof                                  960
-#define D_FwMemInitDescr_ADDR                               15552
-#define D_FwMemInitDescr_ADDR_END                           15567
-#define D_FwMemInitDescr_sizeof                             16
-#define D_AsrcVars_BT_UL_ADDR                               15568
-#define D_AsrcVars_BT_UL_ADDR_END                           15599
-#define D_AsrcVars_BT_UL_sizeof                             32
-#define D_AsrcVars_BT_DL_ADDR                               15600
-#define D_AsrcVars_BT_DL_ADDR_END                           15631
-#define D_AsrcVars_BT_DL_sizeof                             32
-#define D_BT_DL_48_8_OPP100_WRAP_ADDR                       15632
-#define D_BT_DL_48_8_OPP100_WRAP_ADDR_END                   15639
-#define D_BT_DL_48_8_OPP100_WRAP_sizeof                     8
-#define D_BT_DL_48_16_OPP100_WRAP_ADDR                      15640
-#define D_BT_DL_48_16_OPP100_WRAP_ADDR_END                  15647
-#define D_BT_DL_48_16_OPP100_WRAP_sizeof                    8
-#define D_PING_ADDR                                         16384
-#define D_PING_ADDR_END                                     40959
-#define D_PING_sizeof                                       24576
-#define D_PONG_ADDR                                         40960
-#define D_PONG_ADDR_END                                     65535
-#define D_PONG_sizeof                                       24576
-#endif /* _ABEDM_ADDR_H_ */
+#define OMAP_ABE_D_ATCDESCRIPTORS_ADDR                     0x0
+#define OMAP_ABE_D_ATCDESCRIPTORS_SIZE                     0x200
+#define OMAP_ABE_STACK_ADDR                                0x200
+#define OMAP_ABE_STACK_SIZE                                0x70
+#define OMAP_ABE_D_VERSION_ADDR                            0x270
+#define OMAP_ABE_D_VERSION_SIZE                            0x4
+#define OMAP_ABE_D_IODESCR_ADDR                            0x274
+#define OMAP_ABE_D_IODESCR_SIZE                            0x280
+#define OMAP_ABE_D_ZERO_ADDR                               0x4F4
+#define OMAP_ABE_D_ZERO_SIZE                               0x4
+#define OMAP_ABE_DBG_TRACE1_ADDR                           0x4F8
+#define OMAP_ABE_DBG_TRACE1_SIZE                           0x1
+#define OMAP_ABE_DBG_TRACE2_ADDR                           0x4F9
+#define OMAP_ABE_DBG_TRACE2_SIZE                           0x1
+#define OMAP_ABE_DBG_TRACE3_ADDR                           0x4FA
+#define OMAP_ABE_DBG_TRACE3_SIZE                           0x1
+#define OMAP_ABE_D_MULTIFRAME_ADDR                         0x4FC
+#define OMAP_ABE_D_MULTIFRAME_SIZE                         0x190
+#define OMAP_ABE_D_IDLETASK_ADDR                           0x68C
+#define OMAP_ABE_D_IDLETASK_SIZE                           0x2
+#define OMAP_ABE_D_TYPELENGTHCHECK_ADDR                    0x68E
+#define OMAP_ABE_D_TYPELENGTHCHECK_SIZE                    0x2
+#define OMAP_ABE_D_MAXTASKBYTESINSLOT_ADDR                 0x690
+#define OMAP_ABE_D_MAXTASKBYTESINSLOT_SIZE                 0x2
+#define OMAP_ABE_D_REWINDTASKBYTES_ADDR                    0x692
+#define OMAP_ABE_D_REWINDTASKBYTES_SIZE                    0x2
+#define OMAP_ABE_D_PCURRENTTASK_ADDR                       0x694
+#define OMAP_ABE_D_PCURRENTTASK_SIZE                       0x2
+#define OMAP_ABE_D_PFASTLOOPBACK_ADDR                      0x696
+#define OMAP_ABE_D_PFASTLOOPBACK_SIZE                      0x2
+#define OMAP_ABE_D_PNEXTFASTLOOPBACK_ADDR                  0x698
+#define OMAP_ABE_D_PNEXTFASTLOOPBACK_SIZE                  0x4
+#define OMAP_ABE_D_PPCURRENTTASK_ADDR                      0x69C
+#define OMAP_ABE_D_PPCURRENTTASK_SIZE                      0x2
+#define OMAP_ABE_D_SLOTCOUNTER_ADDR                        0x6A0
+#define OMAP_ABE_D_SLOTCOUNTER_SIZE                        0x2
+#define OMAP_ABE_D_LOOPCOUNTER_ADDR                        0x6A4
+#define OMAP_ABE_D_LOOPCOUNTER_SIZE                        0x4
+#define OMAP_ABE_D_REWINDFLAG_ADDR                         0x6A8
+#define OMAP_ABE_D_REWINDFLAG_SIZE                         0x2
+#define OMAP_ABE_D_SLOT23_CTRL_ADDR                        0x6AC
+#define OMAP_ABE_D_SLOT23_CTRL_SIZE                        0x4
+#define OMAP_ABE_D_MCUIRQFIFO_ADDR                         0x6B0
+#define OMAP_ABE_D_MCUIRQFIFO_SIZE                         0x40
+#define OMAP_ABE_D_PINGPONGDESC_ADDR                       0x6F0
+#define OMAP_ABE_D_PINGPONGDESC_SIZE                       0x20
+#define OMAP_ABE_D_PP_MCU_IRQ_ADDR                         0x710
+#define OMAP_ABE_D_PP_MCU_IRQ_SIZE                         0x2
+#define OMAP_ABE_D_SRC44P1_MMDL_STRUCT_ADDR                0x714
+#define OMAP_ABE_D_SRC44P1_MMDL_STRUCT_SIZE                0x12
+#define OMAP_ABE_D_SRC44P1_TONES_STRUCT_ADDR               0x728
+#define OMAP_ABE_D_SRC44P1_TONES_STRUCT_SIZE               0x12
+#define OMAP_ABE_D_CTRLPORTFIFO_ADDR                       0x740
+#define OMAP_ABE_D_CTRLPORTFIFO_SIZE                       0x10
+#define OMAP_ABE_D_IDLE_STATE_ADDR                         0x750
+#define OMAP_ABE_D_IDLE_STATE_SIZE                         0x4
+#define OMAP_ABE_D_STOP_REQUEST_ADDR                       0x754
+#define OMAP_ABE_D_STOP_REQUEST_SIZE                       0x4
+#define OMAP_ABE_D_REF0_ADDR                               0x758
+#define OMAP_ABE_D_REF0_SIZE                               0x2
+#define OMAP_ABE_D_DEBUGREGISTER_ADDR                      0x75C
+#define OMAP_ABE_D_DEBUGREGISTER_SIZE                      0x8C
+#define OMAP_ABE_D_GCOUNT_ADDR                             0x7E8
+#define OMAP_ABE_D_GCOUNT_SIZE                             0x2
+#define OMAP_ABE_D_FASTCOUNTER_ADDR                        0x7EC
+#define OMAP_ABE_D_FASTCOUNTER_SIZE                        0x4
+#define OMAP_ABE_D_SLOWCOUNTER_ADDR                        0x7F0
+#define OMAP_ABE_D_SLOWCOUNTER_SIZE                        0x4
+#define OMAP_ABE_D_AUPLINKROUTING_ADDR                     0x7F4
+#define OMAP_ABE_D_AUPLINKROUTING_SIZE                     0x20
+#define OMAP_ABE_D_VIRTAUDIOLOOP_ADDR                      0x814
+#define OMAP_ABE_D_VIRTAUDIOLOOP_SIZE                      0x4
+#define OMAP_ABE_D_ASRCVARS_DL_VX_ADDR                     0x818
+#define OMAP_ABE_D_ASRCVARS_DL_VX_SIZE                     0x20
+#define OMAP_ABE_D_ASRCVARS_UL_VX_ADDR                     0x838
+#define OMAP_ABE_D_ASRCVARS_UL_VX_SIZE                     0x20
+#define OMAP_ABE_D_COEFADDRESSES_VX_ADDR                   0x858
+#define OMAP_ABE_D_COEFADDRESSES_VX_SIZE                   0x20
+#define OMAP_ABE_D_ASRCVARS_MM_EXT_IN_ADDR                 0x878
+#define OMAP_ABE_D_ASRCVARS_MM_EXT_IN_SIZE                 0x20
+#define OMAP_ABE_D_COEFADDRESSES_MM_ADDR                   0x898
+#define OMAP_ABE_D_COEFADDRESSES_MM_SIZE                   0x20
+#define OMAP_ABE_D_TRACEBUFADR_ADDR                        0x8B8
+#define OMAP_ABE_D_TRACEBUFADR_SIZE                        0x2
+#define OMAP_ABE_D_TRACEBUFOFFSET_ADDR                     0x8BA
+#define OMAP_ABE_D_TRACEBUFOFFSET_SIZE                     0x2
+#define OMAP_ABE_D_TRACEBUFLENGTH_ADDR                     0x8BC
+#define OMAP_ABE_D_TRACEBUFLENGTH_SIZE                     0x2
+#define OMAP_ABE_D_MAXTASKBYTESINSLOT_SAVED_ADDR           0x8C0
+#define OMAP_ABE_D_MAXTASKBYTESINSLOT_SAVED_SIZE           0x4
+#define OMAP_ABE_D_PEMPTY_ADDR                             0x8C4
+#define OMAP_ABE_D_PEMPTY_SIZE                             0x50
+#define OMAP_ABE_D_ECHO_REF_48_16_WRAP_ADDR                0x914
+#define OMAP_ABE_D_ECHO_REF_48_16_WRAP_SIZE                0x8
+#define OMAP_ABE_D_ECHO_REF_48_8_WRAP_ADDR                 0x91C
+#define OMAP_ABE_D_ECHO_REF_48_8_WRAP_SIZE                 0x8
+#define OMAP_ABE_D_BT_UL_16_48_WRAP_ADDR                   0x924
+#define OMAP_ABE_D_BT_UL_16_48_WRAP_SIZE                   0x8
+#define OMAP_ABE_D_BT_UL_8_48_WRAP_ADDR                    0x92C
+#define OMAP_ABE_D_BT_UL_8_48_WRAP_SIZE                    0x8
+#define OMAP_ABE_D_BT_DL_48_16_WRAP_ADDR                   0x934
+#define OMAP_ABE_D_BT_DL_48_16_WRAP_SIZE                   0x8
+#define OMAP_ABE_D_BT_DL_48_8_WRAP_ADDR                    0x93C
+#define OMAP_ABE_D_BT_DL_48_8_WRAP_SIZE                    0x8
+#define OMAP_ABE_D_VX_DL_16_48_WRAP_ADDR                   0x944
+#define OMAP_ABE_D_VX_DL_16_48_WRAP_SIZE                   0x8
+#define OMAP_ABE_D_VX_DL_8_48_WRAP_ADDR                    0x94C
+#define OMAP_ABE_D_VX_DL_8_48_WRAP_SIZE                    0x8
+#define OMAP_ABE_D_VX_UL_48_16_WRAP_ADDR                   0x954
+#define OMAP_ABE_D_VX_UL_48_16_WRAP_SIZE                   0x8
+#define OMAP_ABE_D_VX_UL_48_8_WRAP_ADDR                    0x95C
+#define OMAP_ABE_D_VX_UL_48_8_WRAP_SIZE                    0x8
+#define OMAP_ABE_D_ASRCVARS_BT_UL_ADDR                     0x964
+#define OMAP_ABE_D_ASRCVARS_BT_UL_SIZE                     0x20
+#define OMAP_ABE_D_ASRCVARS_BT_DL_ADDR                     0x984
+#define OMAP_ABE_D_ASRCVARS_BT_DL_SIZE                     0x20
+#define OMAP_ABE_D_BT_DL_48_8_OPP100_WRAP_ADDR             0x9A4
+#define OMAP_ABE_D_BT_DL_48_8_OPP100_WRAP_SIZE             0x8
+#define OMAP_ABE_D_BT_DL_48_16_OPP100_WRAP_ADDR            0x9AC
+#define OMAP_ABE_D_BT_DL_48_16_OPP100_WRAP_SIZE            0x8
+#define OMAP_ABE_D_VX_DL_8_48_FIR_WRAP_ADDR                0x9B4
+#define OMAP_ABE_D_VX_DL_8_48_FIR_WRAP_SIZE                0x8
+#define OMAP_ABE_D_BT_UL_8_48_FIR_WRAP_ADDR                0x9BC
+#define OMAP_ABE_D_BT_UL_8_48_FIR_WRAP_SIZE                0x8
+#define OMAP_ABE_D_TASKSLIST_ADDR                          0x9C4
+#define OMAP_ABE_D_TASKSLIST_SIZE                          0x960
+#define OMAP_ABE_D_HW_TEST_ADDR                            0x1324
+#define OMAP_ABE_D_HW_TEST_SIZE                            0x28
+#define OMAP_ABE_D_TRACEBUFADR_HAL_ADDR                    0x134C
+#define OMAP_ABE_D_TRACEBUFADR_HAL_SIZE                    0x4
+#define OMAP_ABE_D_CHECK_LIST_SMEM_8K_ADDR                 0x1350
+#define OMAP_ABE_D_CHECK_LIST_SMEM_8K_SIZE                 0x80
+#define OMAP_ABE_D_CHECK_LIST_SMEM_16K_ADDR                0x13D0
+#define OMAP_ABE_D_CHECK_LIST_SMEM_16K_SIZE                0x80
+#define OMAP_ABE_D_CHECK_LIST_LEFT_IDX_ADDR                0x1450
+#define OMAP_ABE_D_CHECK_LIST_LEFT_IDX_SIZE                0x2
+#define OMAP_ABE_D_CHECK_LIST_RIGHT_IDX_ADDR               0x1452
+#define OMAP_ABE_D_CHECK_LIST_RIGHT_IDX_SIZE               0x2
+#define OMAP_ABE_D_BT_DL_48_8_FIR_WRAP_ADDR                0x1454
+#define OMAP_ABE_D_BT_DL_48_8_FIR_WRAP_SIZE                0x8
+#define OMAP_ABE_D_BT_DL_48_8_FIR_OPP100_WRAP_ADDR         0x145C
+#define OMAP_ABE_D_BT_DL_48_8_FIR_OPP100_WRAP_SIZE         0x8
+#define OMAP_ABE_D_VX_UL_48_8_FIR_WRAP_ADDR                0x1464
+#define OMAP_ABE_D_VX_UL_48_8_FIR_WRAP_SIZE                0x8
+#define OMAP_ABE_D_DEBUG_FW_TASK_ADDR                      0x1600
+#define OMAP_ABE_D_DEBUG_FW_TASK_SIZE                      0x100
+#define OMAP_ABE_D_DEBUG_FIFO_ADDR                         0x1700
+#define OMAP_ABE_D_DEBUG_FIFO_SIZE                         0x60
+#define OMAP_ABE_D_DEBUG_FIFO_HAL_ADDR                     0x1760
+#define OMAP_ABE_D_DEBUG_FIFO_HAL_SIZE                     0x20
+#define OMAP_ABE_D_FWMEMINIT_ADDR                          0x1780
+#define OMAP_ABE_D_FWMEMINIT_SIZE                          0x3C0
+#define OMAP_ABE_D_FWMEMINITDESCR_ADDR                     0x1B40
+#define OMAP_ABE_D_FWMEMINITDESCR_SIZE                     0x10
+#define OMAP_ABE_D_BT_DL_FIFO_ADDR                         0x1C00
+#define OMAP_ABE_D_BT_DL_FIFO_SIZE                         0x1E0
+#define OMAP_ABE_D_BT_UL_FIFO_ADDR                         0x1E00
+#define OMAP_ABE_D_BT_UL_FIFO_SIZE                         0x1E0
+#define OMAP_ABE_D_MM_EXT_OUT_FIFO_ADDR                    0x2000
+#define OMAP_ABE_D_MM_EXT_OUT_FIFO_SIZE                    0x1E0
+#define OMAP_ABE_D_MM_EXT_IN_FIFO_ADDR                     0x2200
+#define OMAP_ABE_D_MM_EXT_IN_FIFO_SIZE                     0x1E0
+#define OMAP_ABE_D_MM_UL2_FIFO_ADDR                        0x2400
+#define OMAP_ABE_D_MM_UL2_FIFO_SIZE                        0x1E0
+#define OMAP_ABE_D_DMIC_UL_FIFO_ADDR                       0x2600
+#define OMAP_ABE_D_DMIC_UL_FIFO_SIZE                       0x1E0
+#define OMAP_ABE_D_MM_UL_FIFO_ADDR                         0x2800
+#define OMAP_ABE_D_MM_UL_FIFO_SIZE                         0x1E0
+#define OMAP_ABE_D_MM_DL_FIFO_ADDR                         0x2A00
+#define OMAP_ABE_D_MM_DL_FIFO_SIZE                         0x1E0
+#define OMAP_ABE_D_TONES_DL_FIFO_ADDR                      0x2C00
+#define OMAP_ABE_D_TONES_DL_FIFO_SIZE                      0x1E0
+#define OMAP_ABE_D_VIB_DL_FIFO_ADDR                        0x2E00
+#define OMAP_ABE_D_VIB_DL_FIFO_SIZE                        0x1E0
+#define OMAP_ABE_D_DEBUG_HAL_TASK_ADDR                     0x3000
+#define OMAP_ABE_D_DEBUG_HAL_TASK_SIZE                     0x800
+#define OMAP_ABE_D_MCPDM_DL_FIFO_ADDR                      0x3800
+#define OMAP_ABE_D_MCPDM_DL_FIFO_SIZE                      0x1E0
+#define OMAP_ABE_D_MCPDM_UL_FIFO_ADDR                      0x3A00
+#define OMAP_ABE_D_MCPDM_UL_FIFO_SIZE                      0x1E0
+#define OMAP_ABE_D_VX_UL_FIFO_ADDR                         0x3C00
+#define OMAP_ABE_D_VX_UL_FIFO_SIZE                         0x1E0
+#define OMAP_ABE_D_VX_DL_FIFO_ADDR                         0x3E00
+#define OMAP_ABE_D_VX_DL_FIFO_SIZE                         0x1E0
+#define OMAP_ABE_D_PING_ADDR                               0x4000
+#define OMAP_ABE_D_PING_SIZE                               0x6000
+#define OMAP_ABE_D_PONG_ADDR                               0xA000
+#define OMAP_ABE_D_PONG_SIZE                               0x6000

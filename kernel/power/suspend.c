@@ -22,13 +22,8 @@
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/suspend.h>
-
-#if defined(CONFIG_MACH_LGE_OMAP3)
-#include <plat/omap-pm.h>
-#include <plat/omap_device.h>
-#include <plat/powerdomain.h>
-#include <plat/clockdomain.h>
-#endif
+#include <linux/syscore_ops.h>
+#include <trace/events/power.h>
 
 #include "power.h"
 
@@ -40,13 +35,13 @@ const char *const pm_states[PM_SUSPEND_MAX] = {
 	[PM_SUSPEND_MEM]	= "mem",
 };
 
-static struct platform_suspend_ops *suspend_ops;
+static const struct platform_suspend_ops *suspend_ops;
 
 /**
  *	suspend_set_ops - Set the global suspend method table.
  *	@ops:	Pointer to ops structure.
  */
-void suspend_set_ops(struct platform_suspend_ops *ops)
+void suspend_set_ops(const struct platform_suspend_ops *ops)
 {
 	mutex_lock(&pm_mutex);
 	suspend_ops = ops;
@@ -152,19 +147,19 @@ static int suspend_enter(suspend_state_t state)
 	if (suspend_ops->prepare) {
 		error = suspend_ops->prepare();
 		if (error)
-			return error;
+			goto Platform_finish;
 	}
 
 	error = dpm_suspend_noirq(PMSG_SUSPEND);
 	if (error) {
 		printk(KERN_ERR "PM: Some devices failed to power down\n");
-		goto Platfrom_finish;
+		goto Platform_finish;
 	}
 
 	if (suspend_ops->prepare_late) {
 		error = suspend_ops->prepare_late();
 		if (error)
-			goto Power_up_devices;
+			goto Platform_wake;
 	}
 
 	if (suspend_test(TEST_PLATFORM))
@@ -177,16 +172,18 @@ static int suspend_enter(suspend_state_t state)
 	arch_suspend_disable_irqs();
 	BUG_ON(!irqs_disabled());
 
-	error = sysdev_suspend(PMSG_SUSPEND);
+	error = syscore_suspend();
 	if (!error) {
-		if (!suspend_test(TEST_CORE))
+		if (!(suspend_test(TEST_CORE) || pm_wakeup_pending())) {
 			error = suspend_ops->enter(state);
+			events_check_enabled = false;
+		}
 // LGE_UPDATE_S
 #if defined(CONFIG_WAKE_IRQ_PRINT)
 		wakeup_irq_record_reset();
 #endif
 // LGE_UPDATE_E
-		sysdev_resume();
+		syscore_resume();
 	}
 
 	arch_suspend_enable_irqs();
@@ -199,10 +196,9 @@ static int suspend_enter(suspend_state_t state)
 	if (suspend_ops->wake)
 		suspend_ops->wake();
 
- Power_up_devices:
 	dpm_resume_noirq(PMSG_RESUME);
 
- Platfrom_finish:
+ Platform_finish:
 	if (suspend_ops->finish)
 		suspend_ops->finish();
 
@@ -217,21 +213,17 @@ static int suspend_enter(suspend_state_t state)
 int suspend_devices_and_enter(suspend_state_t state)
 {
 	int error;
-	gfp_t saved_mask;
-#if defined(CONFIG_MACH_LGE_OMAP3)
-	struct device l3_dev;
-#endif
 
 	if (!suspend_ops)
 		return -ENOSYS;
 
+	trace_machine_suspend(state);
 	if (suspend_ops->begin) {
 		error = suspend_ops->begin(state);
 		if (error)
 			goto Close;
 	}
 	suspend_console();
-	saved_mask = clear_gfp_allowed_mask(GFP_IOFS);
 	suspend_test_start();
 	error = dpm_suspend_start(PMSG_SUSPEND);
 	if (error) {
@@ -242,17 +234,9 @@ int suspend_devices_and_enter(suspend_state_t state)
 	if (suspend_test(TEST_DEVICES))
 		goto Recover_platform;
 
-#ifndef CONFIG_LGE_DVFS
-	omap_pm_set_min_bus_tput(&l3_dev, OCP_INITIATOR_AGENT, 100 * 1000 * 4);
-#endif	// CONFIG_LGE_DVFS
+	error = suspend_enter(state);
 
-	suspend_enter(state);
-
-#ifndef CONFIG_LGE_DVFS
-	omap_pm_set_min_bus_tput(&l3_dev, OCP_INITIATOR_AGENT, 200 * 1000 * 4);
-#endif	// CONFIG_LGE_DVFS
-	
-Resume_devices:
+ Resume_devices:
 	suspend_test_start();
 	dpm_resume_end(PMSG_RESUME);
 // LGE_UPDATE_S
@@ -261,11 +245,11 @@ Resume_devices:
 #endif 
 // LGE_UPDATE_E
 	suspend_test_finish("resume devices");
-	set_gfp_allowed_mask(saved_mask);
 	resume_console();
  Close:
 	if (suspend_ops->end)
 		suspend_ops->end();
+	trace_machine_suspend(PWR_EVENT_EXIT);
 	return error;
 
  Recover_platform:
@@ -321,7 +305,9 @@ int enter_state(suspend_state_t state)
 		goto Finish;
 
 	pr_debug("PM: Entering %s sleep\n", pm_states[state]);
+	pm_restrict_gfp_mask();
 	error = suspend_devices_and_enter(state);
+	pm_restore_gfp_mask();
 
  Finish:
 	pr_debug("PM: Finishing wakeup.\n");

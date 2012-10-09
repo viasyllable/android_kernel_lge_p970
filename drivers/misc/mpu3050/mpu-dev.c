@@ -56,17 +56,21 @@
 #include "mldl_cfg.h"
 #include "mpu.h"
 
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-03-08,  New Define for Copy from p970 (mpu3050 Power Sequence)*/
 #include <linux/delay.h>
 #include "../mux.h"
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-03-08,  New Define for Copy from p970 (mpu3050 Power Sequence)*/
 
 #define MPU3050_EARLY_SUSPEND_IN_DRIVER 0
 
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-01-31, MPLv3.3 Porting */
 #define ENABLE_REGULATOR
 #ifdef ENABLE_REGULATOR
 #include <linux/regulator/consumer.h>
 static struct regulator *mpu3050_reg; 
 static struct regulator *mpu3050_io_reg;
 #endif
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-01-31, MPLv3.3 Porting */
 
 /* Platform data for the MPU */
 struct mpu_private_data {
@@ -81,7 +85,9 @@ static int pid;
 
 static struct i2c_client *this_client;
 
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-02-16, For Multi Open & Temperature Application */
 static int open_count = 0;
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-02-16, For Multi Open & Temperature Application */
 
 static int mpu_open(struct inode *inode, struct file *file)
 {
@@ -109,7 +115,9 @@ static int mpu_open(struct inode *inode, struct file *file)
 	if (mldl_cfg->pressure && mldl_cfg->pressure->resume)
 		mldl_cfg->requested_sensors |= ML_THREE_AXIS_PRESSURE;
 
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-02-16, For Multi Open & Temperature Application */
 	open_count++;
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-02-16, For Multi Open & Temperature Application */
 
 	return 0;
 }
@@ -130,9 +138,11 @@ static int mpu_release(struct inode *inode, struct file *file)
 	pid = 0;
 
 
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-02-16, For Multi Open & Temperature Application */
 	open_count--;
 	if(open_count != 0)
 		return result;
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-02-16, For Multi Open & Temperature Application */
 
 	accel_adapter = i2c_get_adapter(mldl_cfg->pdata->accel.adapt_num);
 	compass_adapter = i2c_get_adapter(mldl_cfg->pdata->compass.adapt_num);
@@ -305,8 +315,6 @@ mpu_ioctl_set_mpu_config(struct i2c_client *client, unsigned long arg)
 		(struct mpu_private_data *) i2c_get_clientdata(client);
 	struct mldl_cfg *mldl_cfg = &mpu->mldl_cfg;
 	struct mldl_cfg *temp_mldl_cfg;
-
-	//dev_dbg(&this_client->adapter->dev, "%s\n", __func__);
 
 	temp_mldl_cfg = kzalloc(sizeof(struct mldl_cfg), GFP_KERNEL);
 	if (NULL == temp_mldl_cfg)
@@ -831,6 +839,7 @@ static long mpu_ioctl(struct file *file,
 			retval = -EFAULT;
 	}
 	break;
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-02-16, For Temperature Application */
 	case MPU_READ_REGISTER:
 		{
 			unsigned char buf[4] = {0,};
@@ -844,6 +853,8 @@ static long mpu_ioctl(struct file *file,
 						 &buf, sizeof(buf));
 		}
 		break;
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-02-16, For Temperature Application */
+
 	case MPU_READ_MEMORY:
 	case MPU_WRITE_MEMORY:
 	default:
@@ -937,7 +948,6 @@ void mpu_shutdown(struct i2c_client *client)
 	(void) mpu3050_suspend(mldl_cfg, this_client->adapter,
 			       accel_adapter, compass_adapter, pressure_adapter,
 			       TRUE, TRUE, TRUE, TRUE);
-	//dev_dbg(&this_client->adapter->dev, "%s\n", __func__);
 }
 
 int mpu_suspend(struct i2c_client *client, pm_message_t mesg)
@@ -1028,25 +1038,34 @@ static struct miscdevice i2c_mpu_device = {
 	.fops = &mpu_fops,
 };
 
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-03-08,  New Define for Copy from p970 (mpu3050 Power Sequence)*/
 #define MPU_I2C_SCL_GPIO       184
 #define MPU_I2C_SDA_GPIO      185
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-03-08,  New Define for Copy from p970 (mpu3050 Power Sequence)*/
 
-
+/* LGSI_PLT_LGP970_SENSOR_NOT_INITIALIZING_START: 22/08/2011_Seshu */
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-05-27,  complementer for mpu3050_open function */
 #define MAX_RETRY_COUNT 5
 static int retry_count = 0;
-
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-05-27,  complementer for mpu3050_open function */
+/* LGSI_PLT_LGP970_SENSOR_NOT_INITIALIZING_END: 22/08/2011_Seshu */
 int mpu3050_probe(struct i2c_client *client,
 		  const struct i2c_device_id *devid)
 {
 	struct mpu3050_platform_data *pdata;
 	struct mpu_private_data *mpu;
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-01-31, MPLv3.3 Porting */
 	struct device *dev = &client->dev;
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-01-31, MPLv3.3 Porting */
 	struct mldl_cfg *mldl_cfg;
 	int res = 0;
 	struct i2c_adapter *accel_adapter = NULL;
 	struct i2c_adapter *compass_adapter = NULL;
 	struct i2c_adapter *pressure_adapter = NULL;
 
+
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-03-08, Move to this point for mpu3050 Power Sequence (from P970)*/
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-01-31, MPLv3.3 Porting */
 
      /*---------------------------------------------------------------------------
        power
@@ -1086,6 +1105,9 @@ int mpu3050_probe(struct i2c_client *client,
 
 	omap_mux_init_signal("i2c3_scl", OMAP_PIN_INPUT|OMAP_PULL_ENA|OMAP_PULL_UP); //SCL <- gpio 184
 	omap_mux_init_signal("i2c3_sda", OMAP_PIN_INPUT|OMAP_PULL_ENA|OMAP_PULL_UP); //SDA <- gpio 185
+
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-01-31, MPLv3.3 Porting */
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-03-08, Move to this point for mpu3050 Power Sequence (from P970)*/
 
 	dev_dbg(&client->adapter->dev, "%s\n", __func__);
 
@@ -1198,7 +1220,8 @@ int mpu3050_probe(struct i2c_client *client,
 	}
 
 	mldl_cfg->addr = client->addr;
-
+/* LGSI_PLT_LGP970_SENSOR_NOT_INITIALIZING_START: 22/08/2011_Seshu */
+/* LGE_CHANGE_S, ryu.seeyeol@lge.com, 2011-05-27,  complementer for mpu3050_open function */
 open_retry:
 
 	res = mpu3050_open(&mpu->mldl_cfg, client->adapter,
@@ -1226,9 +1249,9 @@ open_retry:
 		}
 #endif
 	}
-	retry_count = 0;
-
-	
+	retry_count = 0; // rsy
+/* LGE_CHANGE_E, ryu.seeyeol@lge.com, 2011-05-27,  complementer for mpu3050_open function */
+/* LGSI_PLT_LGP970_SENSOR_NOT_INITIALIZING_END: 22/08/2011_Seshu */	
 	res = misc_register(&i2c_mpu_device);
 	if (res < 0) {
 		dev_err(&this_client->adapter->dev,

@@ -6,7 +6,7 @@
  * Copyright (C) 2008 Texas Instruments, Inc.
  *
  * Contributors:
- * 	Atanas Filipov <afilipov@mm-sol.com>
+ *	Atanas Filipov <afilipov@mm-sol.com>
  *
  * This package is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -28,7 +28,7 @@
 
 #define OMAP_PREV2RESZ_NAME	"omap-prev2resz"
 
-static struct device 		*p2r_device;
+static struct device		*p2r_device;
 static struct class		*p2r_class;
 static int			 p2r_major = -1;
 
@@ -99,10 +99,12 @@ static void prev2resz_resz_callback(unsigned long status,
 static int prev2resz_ioc_set_config(struct prev2resz_fhdl *fh)
 {
 	struct isp_node *pipe = &fh->pipe;
+	struct isp_device *isp = dev_get_drvdata(fh->isp);
 	int rval, rest;
 
 	if (pipe->in.image.pixelformat != V4L2_PIX_FMT_SBGGR16 &&
 	    pipe->in.image.pixelformat != V4L2_PIX_FMT_SGRBG10DPCM8) {
+
 		pipe->in.image.bytesperline = (pipe->in.image.width * 2) & ~63;
 		rest = (pipe->in.image.width * 2) % 64;
 	} else {
@@ -133,6 +135,7 @@ static int prev2resz_ioc_set_config(struct prev2resz_fhdl *fh)
 		return rval;
 	/* Update return parameters */
 	pipe->in.crop = fh->prev.out.crop;
+	isp->pipeline.prv = fh->prev;
 
 	/* Setup parameters for Resizer input */
 	fh->resz.in			= fh->prev.out;
@@ -151,6 +154,7 @@ static int prev2resz_ioc_set_config(struct prev2resz_fhdl *fh)
 		return rval;
 	/* Update return parameters */
 	pipe->out = fh->resz.out;
+	isp->pipeline.rsz = fh->resz;
 
 	return 0;
 }
@@ -170,10 +174,6 @@ static int prev2resz_ioc_run_engine(struct prev2resz_fhdl *fh)
 
 	rval = isppreview_config_inlineoffset(fh->isp_prev,
 				fh->prev.in.image.bytesperline);
-	if (rval != 0)
-		return rval;
-
-	rval = isppreview_set_outaddr(fh->isp_prev, fh->dst_buff_addr);
 	if (rval != 0)
 		return rval;
 
@@ -210,8 +210,8 @@ static int prev2resz_ioc_run_engine(struct prev2resz_fhdl *fh)
 		fdiv->prev_exp);
 	isp_reg_and_or(fh->isp, OMAP3_ISP_IOMEM_SBL, ISPSBL_SDR_REQ_EXP,
 		       ~(ISPSBL_SDR_REQ_PRV_EXP_MASK |
-		         ISPSBL_SDR_REQ_RSZ_EXP_MASK),
-		         fdiv->prev_exp << ISPSBL_SDR_REQ_PRV_EXP_SHIFT);
+			ISPSBL_SDR_REQ_RSZ_EXP_MASK),
+			fdiv->prev_exp << ISPSBL_SDR_REQ_PRV_EXP_SHIFT);
 	isp_start(fh->isp);
 
 	init_completion(&p2r_ctx.resz_complete);
@@ -267,10 +267,17 @@ static int prev2resz_vbq_setup(struct videobuf_queue *q, unsigned int *cnt,
 	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		*size = fhdl->pipe.out.image.bytesperline *
 			fhdl->pipe.out.image.height;
-	else if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT)
-		*size = fhdl->pipe.in.image.bytesperline *
-			fhdl->pipe.in.image.height;
-	else
+	else if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+		if (fhdl->pipe.in.image.pixelformat != V4L2_PIX_FMT_SBGGR16 &&
+		    fhdl->pipe.in.image.pixelformat !=
+						V4L2_PIX_FMT_SGRBG10DPCM8) {
+			*size = fhdl->pipe.in.image.width *
+			   fhdl->pipe.in.image.height * 2;
+		} else {
+			*size = fhdl->pipe.in.image.width *
+			   fhdl->pipe.in.image.height;
+		}
+	} else
 		return -EINVAL;
 
 	return 0;
@@ -332,8 +339,15 @@ static int prev2resz_vbq_prepare(struct videobuf_queue *q,
 		spin_unlock(&fhdl->dst_vbq_lock);
 	} else if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
 		spin_lock(&fhdl->src_vbq_lock);
-		vb->size = fhdl->pipe.in.image.bytesperline *
+		if (fhdl->pipe.in.image.pixelformat != V4L2_PIX_FMT_SBGGR16 &&
+		    fhdl->pipe.in.image.pixelformat !=
+						V4L2_PIX_FMT_SGRBG10DPCM8) {
+			vb->size = fhdl->pipe.in.image.width *
+			   fhdl->pipe.in.image.height * 2;
+		} else {
+			vb->size = fhdl->pipe.in.image.width *
 			   fhdl->pipe.in.image.height;
+		}
 		vb->width = fhdl->pipe.in.image.width;
 		vb->height = fhdl->pipe.in.image.height;
 		vb->bsize = vb->size;
@@ -427,15 +441,16 @@ static int prev2resz_open(struct inode *inode, struct file *fp)
 	fp->private_data = fh;
 
 	videobuf_queue_sg_init(&fh->src_vbq, &p2r_ctx.vbq_ops, NULL,
-			       &fh->src_vbq_lock, fh->src_vbq.type,
-			       V4L2_FIELD_NONE, sizeof(struct videobuf_buffer),
-			       fh);
+				&fh->src_vbq_lock, fh->src_vbq.type,
+				V4L2_FIELD_NONE, sizeof(struct videobuf_buffer),
+				fh, NULL);
 	spin_lock_init(&fh->src_vbq_lock);
 
 	videobuf_queue_sg_init(&fh->dst_vbq, &p2r_ctx.vbq_ops, NULL,
-			       &fh->dst_vbq_lock, fh->dst_vbq.type,
-			       V4L2_FIELD_NONE, sizeof(struct videobuf_buffer),
-			       fh);
+				&fh->dst_vbq_lock, fh->dst_vbq.type,
+				V4L2_FIELD_NONE, sizeof(struct videobuf_buffer),
+				fh, NULL);
+
 	spin_lock_init(&fh->dst_vbq_lock);
 
 	return 0;
@@ -450,8 +465,8 @@ err_isp:
 /**
  * prev2resz_ioctl - I/O control function for device
  */
-static int prev2resz_ioctl(struct inode *inode, struct file *file,
-			   unsigned int cmd, unsigned long arg)
+static int prev2resz_ioctl(struct file *file, unsigned int cmd,
+			   unsigned long arg)
 {
 	struct prev2resz_fhdl *fh = file->private_data;
 	long rval = 0;
@@ -572,7 +587,7 @@ static int prev2resz_ioctl(struct inode *inode, struct file *file,
 
 		strcpy(v4l2_cap.driver, "omap3wrapper");
 		strcpy(v4l2_cap.card, "omap3wrapper/prev-resz");
-		v4l2_cap.version	= 1.0;;
+		v4l2_cap.version	= 1.0;
 		v4l2_cap.capabilities	= V4L2_CAP_VIDEO_CAPTURE |
 					  V4L2_CAP_READWRITE;
 
@@ -635,7 +650,7 @@ static int prev2resz_release(struct inode *inode, struct file *fp)
 static const struct file_operations dev_fops = {
 	.owner		= THIS_MODULE,
 	.open		= prev2resz_open,
-	.ioctl		= prev2resz_ioctl,
+	.unlocked_ioctl = prev2resz_ioctl,
 	.release	= prev2resz_release
 };
 

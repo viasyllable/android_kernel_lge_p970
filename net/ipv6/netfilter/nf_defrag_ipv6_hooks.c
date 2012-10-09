@@ -71,7 +71,7 @@ static unsigned int ipv6_defrag(unsigned int hooknum,
 	if (reasm == NULL)
 		return NF_STOLEN;
 
-	/* error occured or not fragmented */
+	/* error occurred or not fragmented */
 	if (reasm == skb)
 		return NF_ACCEPT;
 
@@ -135,4 +135,3 @@ module_init(nf_defrag_init);
 module_exit(nf_defrag_fini);
 
 MODULE_LICENSE("GPL");
-

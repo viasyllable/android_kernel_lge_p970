@@ -1,3 +1,4 @@
+
 /* (C) 1999-2001 Paul `Rusty' Russell
  * (C) 2002-2004 Netfilter Core Team <coreteam@netfilter.org>
  *
@@ -120,7 +121,9 @@ static unsigned int ipv4_confirm(unsigned int hooknum,
 		return ret;
 	}
 
-	if (test_bit(IPS_SEQ_ADJUST_BIT, &ct->status)) {
+	/* adjust seqs for loopback traffic only in outgoing direction */
+	if (test_bit(IPS_SEQ_ADJUST_BIT, &ct->status) &&
+	    !nf_is_loopback_packet(skb)) {
 		typeof(nf_nat_seq_adjust_hook) seq_adjust;
 
 		seq_adjust = rcu_dereference(nf_nat_seq_adjust_hook);
@@ -454,4 +457,3 @@ void need_ipv4_conntrack(void)
 	return;
 }
 EXPORT_SYMBOL_GPL(need_ipv4_conntrack);
-

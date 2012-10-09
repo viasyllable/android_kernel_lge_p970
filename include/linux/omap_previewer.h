@@ -6,8 +6,8 @@
  * Copyright (C) 2008 Texas Instruments, Inc.
  *
  * Contributors:
- * 	Leonides Martinez <leonides.martinez@ti.com>
- * 	Sergio Aguirre <saaguirre@ti.com>
+ *	Leonides Martinez <leonides.martinez@ti.com>
+ *	Sergio Aguirre <saaguirre@ti.com>
  *
  * This package is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as

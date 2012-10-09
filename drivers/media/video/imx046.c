@@ -33,9 +33,11 @@
 
 #define I2C_M_WR 0
 
+#define imx046sensor_calc_xclk() IMX046_XCLK_NOM_1
+
 
 /* from IMX046ES_registerSetting_I2C_MIPI_2lane_def_080925.xls */
-const static struct imx046_reg initial_list[] = {
+static const struct imx046_reg initial_list[] = {
 	{IMX046_REG_IMAGE_ORIENTATION, 0x03, I2C_8BIT},
 	{IMX046_REG_COARSE_INT_TIME, 0x0120, I2C_16BIT},
 	{IMX046_REG_ANALOG_GAIN_GLOBAL, 0x80, I2C_16BIT},
@@ -104,7 +106,7 @@ static struct i2c_driver imx046sensor_i2c_driver;
 static unsigned long xclk_current = IMX046_XCLK_NOM_1;
 
 /* list of image formats supported by imx046 sensor */
-const static struct v4l2_fmtdesc imx046_formats[] = {
+static const struct v4l2_fmtdesc imx046_formats[] = {
 	{
 		.description	= "Bayer10 (RGr/GbB)",
 		.pixelformat	= V4L2_PIX_FMT_SRGGB10,
@@ -298,7 +300,7 @@ static struct imx046_sensor_settings imx046_settings[] = {
 #define IMX046_MODES_COUNT ARRAY_SIZE(imx046_settings)
 
 static unsigned isize_current = IMX046_MODES_COUNT - 1;
-static struct imx046_clock_freq current_clk;
+struct imx046_clock_freq current_clk;
 
 struct i2c_list {
 	struct i2c_msg *reg_list;
@@ -403,7 +405,7 @@ static int imx046_read_reg(struct i2c_client *client, u16 data_length, u16 reg,
 	msg->buf = data;
 
 	/* Write addr - high byte goes out first */
-	data[0] = (u8) (reg >> 8);;
+	data[0] = (u8) (reg >> 8);
 	data[1] = (u8) (reg & 0xff);
 	err = i2c_transfer(client->adapter, msg, 1);
 
@@ -472,10 +474,7 @@ retry:
 		data[5] = val & 0xff;
 	}
 
-	if (data_length == 1)
-		dev_dbg(&client->dev, "IMX046 Wrt:[0x%04X]=0x%02X\n",
-				reg, val);
-	else if (data_length == 2)
+	if (data_length == 1 || data_length == 2)
 		dev_dbg(&client->dev, "IMX046 Wrt:[0x%04X]=0x%04X\n",
 				reg, val);
 
@@ -489,8 +488,9 @@ retry:
 		retries++;
 		mdelay(20);
 		goto retry;
+	} else {
+		v4l_info(client, "Retrying I2C... %d Failed", retries);
 	}
-
 	return err;
 }
 
@@ -542,11 +542,11 @@ static unsigned imx046_find_size(unsigned int width, unsigned int height)
 			break;
 	}
 
-	printk(KERN_DEBUG "imx046_find_size: Req Size=%dx%d, "
-			"Calc Size=%dx%d\n", width, height,
+	pr_debug("%s: Req Size=%dx%d, Calc Size=%dx%d\n", __func__,
+			width, height,
 			imx046_settings[isize].frame.x_output_size,
-			imx046_settings[isize].frame.y_output_size);
-
+			imx046_settings[isize].frame.y_output_size
+		);
 	return isize;
 }
 
@@ -614,21 +614,11 @@ static int imx046_set_framerate(struct v4l2_int_device *s,
 
 	imx046_settings[isize].frame.frame_len_lines = frame_length_lines;
 
-	printk(KERN_DEBUG "IMX046 Set Framerate: fper=%d/%d, "
-	       "frame_len_lines=%d, max_expT=%dus\n", fper->numerator,
-	       fper->denominator, frame_length_lines, IMX046_MAX_EXPOSURE);
-
+	pr_debug("%s: IMX046 Set Framerate:fper=%d/%d\n", __func__,
+		fper->numerator, fper->denominator);
+	pr_debug("%s: frame_len_lines=%d, IMX046 max_expT=%dus\n", __func__,
+		frame_length_lines, IMX046_MAX_EXPOSURE);
 	return err;
-}
-
-/**
- * imx046sensor_calc_xclk - Calculate the required xclk frequency
- *
- * Xclk is not determined from framerate for the IMX046
- */
-static unsigned long imx046sensor_calc_xclk(void)
-{
-	return IMX046_XCLK_NOM_1;
 }
 
 /**
@@ -672,20 +662,20 @@ static int imx046sensor_set_exposure_time(u32 exp_time,
 
 	if ((current_power_state == V4L2_POWER_ON) || sensor->resuming) {
 		if (exp_time < IMX046_MIN_EXPOSURE) {
-			v4l_err(client, "Exposure time %d us not within"
+			v4l_err(client, "Exposure time %d is not within"
 					" the legal range.\n", exp_time);
 			v4l_err(client, "Exposure time must be between"
-					" %d us and %d us\n",
+					" %d is and %d is\n",
 					IMX046_MIN_EXPOSURE,
 					IMX046_MAX_EXPOSURE);
 			exp_time = IMX046_MIN_EXPOSURE;
 		}
 
 		if (exp_time > IMX046_MAX_EXPOSURE) {
-			v4l_err(client, "Exposure time %d us not within"
+			v4l_err(client, "Exposure time %d is not within"
 					" the legal range.\n", exp_time);
 			v4l_err(client, "Exposure time must be between"
-					" %d us and %d us\n",
+					" %d is and %d is\n",
 					IMX046_MIN_EXPOSURE,
 					IMX046_MAX_EXPOSURE);
 			exp_time = IMX046_MAX_EXPOSURE;
@@ -709,11 +699,14 @@ static int imx046sensor_set_exposure_time(u32 exp_time,
 					       IMX046_REG_FRAME_LEN_LINES,
 					       ss->frame.frame_len_lines,
 					       I2C_16BIT);
+		if (err)
+			goto error;
 
 		err = imx046_write_reg(client, IMX046_REG_COARSE_INT_TIME,
 				       coarse_int_time, I2C_16BIT);
 	}
 
+error:
 	if (err) {
 		v4l_err(client, "Error setting exposure time: %d", err);
 	} else {
@@ -723,7 +716,6 @@ static int imx046sensor_set_exposure_time(u32 exp_time,
 			lvc->current_value = exp_time;
 		}
 	}
-
 	return err;
 }
 
@@ -838,27 +830,48 @@ static int imx046_update_clocks(u32 xclk, unsigned isize)
  */
 static int imx046_setup_pll(struct i2c_client *client, unsigned isize)
 {
+	int err = 0;
 	u32 rgpltd_reg;
 	u32 rgpltd[3] = {2, 0, 1};
 
-	imx046_write_reg(client, IMX046_REG_PRE_PLL_CLK_DIV,
+	err = imx046_write_reg(client, IMX046_REG_PRE_PLL_CLK_DIV,
 		imx046_settings[isize].clk.pre_pll_div, I2C_16BIT);
 
-	imx046_write_reg(client, IMX046_REG_PLL_MULTIPLIER,
+	if (err)
+		goto error;
+
+	err = imx046_write_reg(client, IMX046_REG_PLL_MULTIPLIER,
 		imx046_settings[isize].clk.pll_mult, I2C_16BIT);
 
-	imx046_read_reg(client, I2C_8BIT, IMX046_REG_RGPLTD_RGCLKEN,
+	if (err)
+		goto error;
+
+	err = imx046_read_reg(client, I2C_8BIT, IMX046_REG_RGPLTD_RGCLKEN,
 		&rgpltd_reg);
+
+	if (err)
+		goto error;
+
 	rgpltd_reg &= ~RGPLTD_MASK;
 	rgpltd_reg |= rgpltd[imx046_settings[isize].clk.post_pll_div >> 1];
-	imx046_write_reg(client, IMX046_REG_RGPLTD_RGCLKEN,
+
+	err = imx046_write_reg(client, IMX046_REG_RGPLTD_RGCLKEN,
 		rgpltd_reg, I2C_8BIT);
 
-	imx046_write_reg(client, IMX046_REG_VT_PIX_CLK_DIV,
+	if (err)
+		goto error;
+
+	err = imx046_write_reg(client, IMX046_REG_VT_PIX_CLK_DIV,
 		imx046_settings[isize].clk.vt_pix_clk_div, I2C_16BIT);
 
-	imx046_write_reg(client, IMX046_REG_VT_SYS_CLK_DIV,
+	if (err)
+		goto error;
+
+	err = imx046_write_reg(client, IMX046_REG_VT_SYS_CLK_DIV,
 		imx046_settings[isize].clk.vt_sys_clk_div, I2C_16BIT);
+
+	if (err)
+		goto error;
 
 	printk(KERN_DEBUG "IMX046: pre_pll_clk_div=%u, pll_mult=%u, "
 		"rgpltd=0x%x, vt_pix_clk_div=%u, vt_sys_clk_div=%u\n",
@@ -868,6 +881,10 @@ static int imx046_setup_pll(struct i2c_client *client, unsigned isize)
 		imx046_settings[isize].clk.vt_sys_clk_div);
 
 	return 0;
+
+error:
+	v4l_err(client, "Error initializing the sensor PLL registers: %d", err);
+	return err;
 }
 
 /**
@@ -877,29 +894,51 @@ static int imx046_setup_pll(struct i2c_client *client, unsigned isize)
  */
 static int imx046_setup_mipi(struct v4l2_int_device *s, unsigned isize)
 {
+	int err = 0;
 	struct imx046_sensor *sensor = s->priv;
 	struct i2c_client *client = sensor->i2c_client;
 
 	/* NOTE: Make sure imx046_update_clocks is called 1st */
 
 	/* Enable MIPI */
-	imx046_write_reg(client, IMX046_REG_RGOUTSEL1, 0x00, I2C_8BIT);
-	imx046_write_reg(client, IMX046_REG_TESTDI, 0x04, I2C_8BIT);
+	err = imx046_write_reg(client, IMX046_REG_RGOUTSEL1, 0x00, I2C_8BIT);
+	if (err)
+		goto error;
+
+	err = imx046_write_reg(client, IMX046_REG_TESTDI, 0x04, I2C_8BIT);
+	if (err)
+		goto error;
 
 	/* Set sensor Mipi timing params */
-	imx046_write_reg(client, IMX046_REG_RGTHSTRAIL, 0x06, I2C_8BIT);
+	err = imx046_write_reg(client, IMX046_REG_RGTHSTRAIL, 0x06, I2C_8BIT);
+	if (err)
+		goto error;
 
-	imx046_write_reg(client, IMX046_REG_RGTHSPREPARE,
+	err = imx046_write_reg(client, IMX046_REG_RGTHSPREPARE,
 		imx046_settings[isize].mipi.ths_prepare, I2C_8BIT);
+	if (err)
+		goto error;
 
-	imx046_write_reg(client, IMX046_REG_RGTHSZERO,
+	err = imx046_write_reg(client, IMX046_REG_RGTHSZERO,
 		imx046_settings[isize].mipi.ths_zero, I2C_8BIT);
+	if (err)
+		goto error;
 
 	/* Set number of lanes in sensor */
-	if (imx046_settings[isize].mipi.data_lanes == 2)
-		imx046_write_reg(client, IMX046_REG_RGLANESEL, 0x00, I2C_8BIT);
-	else
-		imx046_write_reg(client, IMX046_REG_RGLANESEL, 0x01, I2C_8BIT);
+	if (imx046_settings[isize].mipi.data_lanes == 2) {
+		err = imx046_write_reg(client,
+					IMX046_REG_RGLANESEL,
+					0x00,
+					I2C_8BIT
+					);
+		if (err)
+			goto error;
+		} else {
+		err = imx046_write_reg(client, IMX046_REG_RGLANESEL,
+					0x01, I2C_8BIT);
+		if (err)
+			goto error;
+	}
 
 	/* Set number of lanes in isp */
 	sensor->pdata->csi2_lane_count(s,
@@ -919,6 +958,10 @@ static int imx046_setup_mipi(struct v4l2_int_device *s, unsigned isize)
 		(imx046_settings[isize].mipi.data_lanes == 2) ? 0 : 1);
 
 	return 0;
+
+error:
+	v4l_err(client, "Error initializing sensor & ISP MIPI Reg: %d", err);
+	return err;
 }
 
 /**
@@ -928,60 +971,110 @@ static int imx046_setup_mipi(struct v4l2_int_device *s, unsigned isize)
  */
 static int imx046_configure_frame(struct i2c_client *client, unsigned isize)
 {
+	int err = 0;
 	u32 val;
 
-	imx046_write_reg(client, IMX046_REG_FRAME_LEN_LINES,
-		imx046_settings[isize].frame.frame_len_lines, I2C_16BIT);
+	err = imx046_write_reg(client, IMX046_REG_FRAME_LEN_LINES,
+			imx046_settings[isize].frame.frame_len_lines,
+			I2C_16BIT
+			);
+	if (err)
+		goto error;
 
-	imx046_write_reg(client, IMX046_REG_LINE_LEN_PCK,
-		imx046_settings[isize].frame.line_len_pck, I2C_16BIT);
+	err = imx046_write_reg(client, IMX046_REG_LINE_LEN_PCK,
+			imx046_settings[isize].frame.line_len_pck, I2C_16BIT);
+	if (err)
+		goto error;
 
-	imx046_write_reg(client, IMX046_REG_X_ADDR_START,
-		imx046_settings[isize].frame.x_addr_start, I2C_16BIT);
+	err = imx046_write_reg(client, IMX046_REG_X_ADDR_START,
+			imx046_settings[isize].frame.x_addr_start, I2C_16BIT);
+	if (err)
+		goto error;
 
-	imx046_write_reg(client, IMX046_REG_X_ADDR_END,
-		imx046_settings[isize].frame.x_addr_end, I2C_16BIT);
+	err = imx046_write_reg(client, IMX046_REG_X_ADDR_END,
+			imx046_settings[isize].frame.x_addr_end, I2C_16BIT);
+	if (err)
+		goto error;
 
-	imx046_write_reg(client, IMX046_REG_Y_ADDR_START,
-		imx046_settings[isize].frame.y_addr_start, I2C_16BIT);
+	err = imx046_write_reg(client, IMX046_REG_Y_ADDR_START,
+			imx046_settings[isize].frame.y_addr_start, I2C_16BIT);
+	if (err)
+		goto error;
 
-	imx046_write_reg(client, IMX046_REG_Y_ADDR_END,
-		imx046_settings[isize].frame.y_addr_end, I2C_16BIT);
+	err = imx046_write_reg(client, IMX046_REG_Y_ADDR_END,
+			imx046_settings[isize].frame.y_addr_end, I2C_16BIT);
+	if (err)
+		goto error;
 
-	imx046_write_reg(client, IMX046_REG_X_OUTPUT_SIZE,
-		imx046_settings[isize].frame.x_output_size, I2C_16BIT);
+	err = imx046_write_reg(client, IMX046_REG_X_OUTPUT_SIZE,
+			imx046_settings[isize].frame.x_output_size, I2C_16BIT);
+	if (err)
+		goto error;
 
-	imx046_write_reg(client, IMX046_REG_Y_OUTPUT_SIZE,
-		imx046_settings[isize].frame.y_output_size, I2C_16BIT);
+	err = imx046_write_reg(client, IMX046_REG_Y_OUTPUT_SIZE,
+			imx046_settings[isize].frame.y_output_size, I2C_16BIT);
+	if (err)
+		goto error;
 
-	imx046_write_reg(client, IMX046_REG_X_EVEN_INC,
-		imx046_settings[isize].frame.x_even_inc, I2C_16BIT);
+	err = imx046_write_reg(client, IMX046_REG_X_EVEN_INC,
+			imx046_settings[isize].frame.x_even_inc, I2C_16BIT);
+	if (err)
+		goto error;
 
-	imx046_write_reg(client, IMX046_REG_X_ODD_INC,
-		imx046_settings[isize].frame.x_odd_inc, I2C_16BIT);
+	err = imx046_write_reg(client, IMX046_REG_X_ODD_INC,
+			imx046_settings[isize].frame.x_odd_inc, I2C_16BIT);
+	if (err)
+		goto error;
 
-	imx046_write_reg(client, IMX046_REG_Y_EVEN_INC,
-		imx046_settings[isize].frame.y_even_inc, I2C_16BIT);
+	err = imx046_write_reg(client, IMX046_REG_Y_EVEN_INC,
+			imx046_settings[isize].frame.y_even_inc, I2C_16BIT);
+	if (err)
+		goto error;
 
-	imx046_write_reg(client, IMX046_REG_Y_ODD_INC,
-		imx046_settings[isize].frame.y_odd_inc, I2C_16BIT);
+	err = imx046_write_reg(client, IMX046_REG_Y_ODD_INC,
+			imx046_settings[isize].frame.y_odd_inc, I2C_16BIT);
+	if (err)
+		goto error;
 
-	imx046_read_reg(client, I2C_8BIT, IMX046_REG_PGACUR_VMODEADD, &val);
+	err = imx046_read_reg(client, I2C_8BIT, IMX046_REG_PGACUR_VMODEADD,
+				&val);
+	if (err)
+		goto error;
+
 	val &= ~VMODEADD_MASK;
 	val |= imx046_settings[isize].frame.v_mode_add << VMODEADD_SHIFT;
-	imx046_write_reg(client, IMX046_REG_PGACUR_VMODEADD, val, I2C_8BIT);
 
-	imx046_read_reg(client, I2C_8BIT, IMX046_REG_HMODEADD, &val);
+	err = imx046_write_reg(client,
+				IMX046_REG_PGACUR_VMODEADD,
+				val, I2C_8BIT
+				);
+	if (err)
+		goto error;
+
+	err = imx046_read_reg(client, I2C_8BIT, IMX046_REG_HMODEADD, &val);
+	if (err)
+		goto error;
+
 	val &= ~HMODEADD_MASK;
 	val |= imx046_settings[isize].frame.h_mode_add << HMODEADD_SHIFT;
-	imx046_write_reg(client, IMX046_REG_HMODEADD, val, I2C_8BIT);
+	err = imx046_write_reg(client, IMX046_REG_HMODEADD, val, I2C_8BIT);
+	if (err)
+		goto error;
 
-	imx046_read_reg(client, I2C_8BIT, IMX046_REG_HADDAVE, &val);
+	err = imx046_read_reg(client, I2C_8BIT, IMX046_REG_HADDAVE, &val);
+	if (err)
+		goto error;
+
 	val &= ~HADDAVE_MASK;
 	val |= imx046_settings[isize].frame.h_add_ave << HADDAVE_SHIFT;
-	imx046_write_reg(client, IMX046_REG_HADDAVE, val, I2C_8BIT);
-
+	err = imx046_write_reg(client, IMX046_REG_HADDAVE, val, I2C_8BIT);
+	if (err)
+		goto error;
 	return 0;
+
+error:
+	v4l_err(client, "Error initializing image frame registers: %d", err);
+	return err;
 }
 
  /**
@@ -999,6 +1092,7 @@ static int imx046_configure_frame(struct i2c_client *client, unsigned isize)
 static int imx046_configure_test_pattern(int mode, struct v4l2_int_device *s,
 					 struct vcontrol *lvc)
 {
+	int err = 0;
 	struct imx046_sensor *sensor = s->priv;
 	struct i2c_client *client = sensor->i2c_client;
 
@@ -1008,42 +1102,89 @@ static int imx046_configure_test_pattern(int mode, struct v4l2_int_device *s,
 		case IMX046_TEST_PATT_COLOR_BAR:
 		case IMX046_TEST_PATT_PN9:
 			/* red */
-			imx046_write_reg(client, IMX046_REG_TEST_PATT_RED,
-							0x07ff, I2C_16BIT);
+			err = imx046_write_reg(client,
+						IMX046_REG_TEST_PATT_RED,
+						0x07ff,
+						I2C_16BIT
+						);
+			if (err)
+				goto error;
+
 			/* green-red */
-			imx046_write_reg(client, IMX046_REG_TEST_PATT_GREENR,
-							0x00ff,	I2C_16BIT);
+			err = imx046_write_reg(client,
+						IMX046_REG_TEST_PATT_GREENR,
+						0x00ff,
+						I2C_16BIT
+						);
+			if (err)
+				goto error;
 			/* blue */
-			imx046_write_reg(client, IMX046_REG_TEST_PATT_BLUE,
-							0x0000, I2C_16BIT);
+			err = imx046_write_reg(client,
+						IMX046_REG_TEST_PATT_BLUE,
+						0x0000,
+						I2C_16BIT
+						);
+
+			if (err)
+				goto error;
 			/* green-blue */
-			imx046_write_reg(client, IMX046_REG_TEST_PATT_GREENB,
-							0x0000,	I2C_16BIT);
+			err = imx046_write_reg(client,
+						IMX046_REG_TEST_PATT_GREENB,
+						0x0000,
+						I2C_16BIT
+						);
+			if (err)
+				goto error;
 			break;
 		case IMX046_TEST_PATT_SOLID_COLOR:
 			/* red */
-			imx046_write_reg(client, IMX046_REG_TEST_PATT_RED,
+			err = imx046_write_reg(client, IMX046_REG_TEST_PATT_RED,
 				(IMX046_BLACK_LEVEL_AVG & 0x00ff), I2C_16BIT);
+			if (err)
+				goto error;
 			/* green-red */
-			imx046_write_reg(client, IMX046_REG_TEST_PATT_GREENR,
+			err = imx046_write_reg(client,
+				IMX046_REG_TEST_PATT_GREENR,
 				(IMX046_BLACK_LEVEL_AVG & 0x00ff), I2C_16BIT);
+			if (err)
+				goto error;
 			/* blue */
-			imx046_write_reg(client, IMX046_REG_TEST_PATT_BLUE,
-				(IMX046_BLACK_LEVEL_AVG & 0x00ff), I2C_16BIT);
+			err = imx046_write_reg(client,
+				IMX046_REG_TEST_PATT_BLUE,
+				(IMX046_BLACK_LEVEL_AVG & 0x00ff),
+				I2C_16BIT
+				);
+
+			if (err)
+				goto error;
 			/* green-blue */
-			imx046_write_reg(client, IMX046_REG_TEST_PATT_GREENB,
-				(IMX046_BLACK_LEVEL_AVG & 0x00ff), I2C_16BIT);
+			err = imx046_write_reg(client,
+						IMX046_REG_TEST_PATT_GREENB,
+						(IMX046_BLACK_LEVEL_AVG
+								& 0x00ff),
+						I2C_16BIT);
+			if (err)
+				goto error;
 			break;
 		}
 		/* test-pattern mode */
-		imx046_write_reg(client, IMX046_REG_TEST_PATT_MODE,
+		err = imx046_write_reg(client, IMX046_REG_TEST_PATT_MODE,
 						(mode & 0x7), I2C_16BIT);
+		if (err)
+			goto error;
+
 		/* Disable sensor ISP processing */
-		imx046_write_reg(client, IMX046_REG_TESBYPEN,
+		err = imx046_write_reg(client, IMX046_REG_TESBYPEN,
 					(mode == 0) ? 0x0 : 0x10, I2C_8BIT);
+		if (err)
+			goto error;
 	}
 	lvc->current_value = mode;
 	return 0;
+
+error:
+	v4l_err(client, "Error Configuring imx046 test pattern: %d", err);
+	return err;
 }
 /**
  * imx046_configure - Configure the imx046 for the specified image mode
@@ -1057,16 +1198,21 @@ static int imx046_configure_test_pattern(int mode, struct v4l2_int_device *s,
  */
 static int imx046_configure(struct v4l2_int_device *s)
 {
+	int err = 0;
 	struct imx046_sensor *sensor = s->priv;
 	struct i2c_client *client = sensor->i2c_client;
 	unsigned isize = isize_current;
-	int err, i;
+	int i;
 	struct vcontrol *lvc = NULL;
 
 	err = imx046_write_reg(client, IMX046_REG_SW_RESET, 0x01, I2C_8BIT);
+	if (err)
+		goto error;
 	mdelay(5);
 
-	imx046_write_regs(client, initial_list);
+	err = imx046_write_regs(client, initial_list);
+	if (err)
+		goto error;
 
 	imx046_setup_pll(client, isize);
 
@@ -1107,8 +1253,14 @@ static int imx046_configure(struct v4l2_int_device *s)
 	}
 	/* configure streaming ON */
 	err = imx046_write_reg(client, IMX046_REG_MODE_SELECT, 0x01, I2C_8BIT);
+	if (err)
+		goto error;
 	mdelay(1);
 
+	return err;
+
+error:
+	v4l_err(client, "Error Configure the imx046: %d", err);
 	return err;
 }
 
@@ -1339,8 +1491,6 @@ static int ioctl_s_fmt_cap(struct v4l2_int_device *s, struct v4l2_format *f)
 		return rval;
 	else
 		sensor->pix = *pix;
-
-
 	return rval;
 }
 
@@ -1356,7 +1506,6 @@ static int ioctl_g_fmt_cap(struct v4l2_int_device *s, struct v4l2_format *f)
 {
 	struct imx046_sensor *sensor = s->priv;
 	f->fmt.pix = sensor->pix;
-
 	return 0;
 }
 
@@ -1370,7 +1519,6 @@ static int ioctl_g_fmt_cap(struct v4l2_int_device *s, struct v4l2_format *f)
 static int ioctl_priv_g_pixclk(struct v4l2_int_device *s, u32 *pixclk)
 {
 	*pixclk = current_clk.vt_pix_clk;
-
 	return 0;
 }
 
@@ -1529,7 +1677,7 @@ static int ioctl_g_priv(struct v4l2_int_device *s, void *p)
 
 }
 
-static int __imx046_power_off_standby(struct v4l2_int_device *s,
+static int imx046_power_off_standby(struct v4l2_int_device *s,
 				      enum v4l2_power on)
 {
 	struct imx046_sensor *sensor = s->priv;
@@ -1549,12 +1697,12 @@ static int __imx046_power_off_standby(struct v4l2_int_device *s,
 
 static int imx046_power_off(struct v4l2_int_device *s)
 {
-	return __imx046_power_off_standby(s, V4L2_POWER_OFF);
+	return imx046_power_off_standby(s, V4L2_POWER_OFF);
 }
 
 static int imx046_power_standby(struct v4l2_int_device *s)
 {
-	return __imx046_power_off_standby(s, V4L2_POWER_STANDBY);
+	return imx046_power_off_standby(s, V4L2_POWER_STANDBY);
 }
 
 static int imx046_power_on(struct v4l2_int_device *s)
@@ -1585,13 +1733,17 @@ static int imx046_power_on(struct v4l2_int_device *s)
  */
 static int ioctl_s_power(struct v4l2_int_device *s, enum v4l2_power on)
 {
+	int err = 0;
 	struct imx046_sensor *sensor = s->priv;
 	struct vcontrol *lvc;
 	int i;
 
 	switch (on) {
 	case V4L2_POWER_ON:
-		imx046_power_on(s);
+		err = imx046_power_on(s);
+		if (err)
+			return -ENODEV;
+
 		if (current_power_state == V4L2_POWER_STANDBY) {
 			sensor->resuming = true;
 			imx046_configure(s);
@@ -1852,6 +2004,16 @@ static int __devinit imx046_probe(struct i2c_client *client,
 		return -ENODEV;
 	}
 
+	if (!sensor->pdata->power_set) {
+		v4l_err(client, "Power Set Failure\n");
+		return -ENODEV;
+	}
+
+	if (!sensor->pdata->set_xclk) {
+		v4l_err(client, "Clock Set Failure\n");
+		return -ENODEV;
+	}
+
 	sensor->v4l2_int_device = &imx046_int_device;
 	sensor->i2c_client = client;
 
@@ -1929,7 +2091,7 @@ static int __init imx046sensor_init(void)
 	}
 	return 0;
 }
-late_initcall(imx046sensor_init);
+module_init(imx046sensor_init);
 
 /**
  * imx046sensor_cleanup - sensor driver module_exit handler

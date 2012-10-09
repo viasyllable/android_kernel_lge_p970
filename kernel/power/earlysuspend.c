@@ -23,13 +23,10 @@
 
 #include "power.h"
 
-#ifdef CONFIG_LGE_DVFS
-#include <linux/dvs_suite.h>
-#endif	// CONFIG_LGE_DVFS
-
 enum {
 	DEBUG_USER_STATE = 1U << 0,
 	DEBUG_SUSPEND = 1U << 2,
+	DEBUG_VERBOSE = 1U << 3,
 };
 static int debug_mask = DEBUG_USER_STATE;
 module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
@@ -79,18 +76,6 @@ static void early_suspend(struct work_struct *work)
 	struct early_suspend *pos;
 	unsigned long irqflags;
 	int abort = 0;
-#ifdef CONFIG_LGE_DVFS
-	int ds_cpu = smp_processor_id();
-
-	if(ds_control.flag_run_dvs == 1)
-	{
-		if(ds_cpu == 0){
-			per_cpu(ds_sys_status, 0).flag_post_early_suspend = 1;
-			per_cpu(ds_sys_status, 0).do_post_early_suspend_sec = 
-				per_cpu(ds_counter, ds_cpu).elapsed_sec + DS_POST_EARLY_SUSPEND_DELAY_SEC;
-		}
-	}
-#endif	// CONFIG_LGE_DVFS
 
 	mutex_lock(&early_suspend_lock);
 	spin_lock_irqsave(&state_lock, irqflags);
@@ -110,8 +95,16 @@ static void early_suspend(struct work_struct *work)
 	if (debug_mask & DEBUG_SUSPEND)
 		pr_info("early_suspend: call handlers\n");
 	list_for_each_entry(pos, &early_suspend_handlers, link) {
-		if (pos->suspend != NULL)
-			pos->suspend(pos);
+		if (pos->suspend != NULL) {
+			char sym[KSYM_SYMBOL_LEN];
+			sprintf(sym,"%pf",pos->suspend);
+			if (debug_mask & DEBUG_VERBOSE)
+				pr_info("early_suspend: calling %pf (%d)\n", pos->suspend,strlen(sym));
+			if (!strlen(sym))
+				pr_err("late_resume: this would have crashed. Someone unregistered its hooks!\n");
+			else
+				pos->suspend(pos);
+		}
 	}
 	mutex_unlock(&early_suspend_lock);
 
@@ -119,7 +112,6 @@ static void early_suspend(struct work_struct *work)
 		pr_info("early_suspend: sync\n");
 
 	sys_sync();
-
 abort:
 	spin_lock_irqsave(&state_lock, irqflags);
 	if (state == SUSPEND_REQUESTED_AND_SUSPENDED)
@@ -132,9 +124,6 @@ static void late_resume(struct work_struct *work)
 	struct early_suspend *pos;
 	unsigned long irqflags;
 	int abort = 0;
-#ifdef CONFIG_LGE_DVFS
-	int ds_cpu = smp_processor_id();
-#endif	// CONFIG_LGE_DVFS
 
 	mutex_lock(&early_suspend_lock);
 	spin_lock_irqsave(&state_lock, irqflags);
@@ -151,23 +140,23 @@ static void late_resume(struct work_struct *work)
 	}
 	if (debug_mask & DEBUG_SUSPEND)
 		pr_info("late_resume: call handlers\n");
-	list_for_each_entry_reverse(pos, &early_suspend_handlers, link)
-		if (pos->resume != NULL)
-			pos->resume(pos);
+	list_for_each_entry_reverse(pos, &early_suspend_handlers, link) {
+		if (pos->resume != NULL) {
+			char sym[KSYM_SYMBOL_LEN];
+			sprintf(sym,"%pf",pos->resume);
+			if (debug_mask & DEBUG_VERBOSE)
+				pr_info("late_resume: calling %pf (%d)\n", pos->resume,strlen(sym));
+
+			if (!strlen(sym))
+				pr_err("late_resume: this would have crashed. Someone unregistered its hooks!\n");
+			else
+				pos->resume(pos);
+		}
+	}
 	if (debug_mask & DEBUG_SUSPEND)
 		pr_info("late_resume: done\n");
 abort:
 	mutex_unlock(&early_suspend_lock);
-
-#ifdef CONFIG_LGE_DVFS
-	if(ds_control.flag_run_dvs == 1)
-	{
-		if(ds_cpu == 0){
-			per_cpu(ds_sys_status, 0).flag_post_early_suspend = 0;
-			per_cpu(ds_sys_status, 0).flag_do_post_early_suspend = 0;
-		}
-	}
-#endif	// CONFIG_LGE_DVFS
 }
 
 void request_suspend_state(suspend_state_t new_state)

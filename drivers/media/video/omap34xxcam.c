@@ -131,8 +131,6 @@ out:
  */
 void omap34xxcam_vbq_complete(struct videobuf_buffer *vb, void *priv)
 {
-    //[LGE_CHANGE_START] 20110719, ajit.saunshikar@lge.com
-	#if 0 //Meenak
 	struct v4l2_fh *vfh = priv;
 	struct omap34xxcam_fh *ofh = to_omap34xxcam_fh(vfh);
 	struct timespec temp_tp;
@@ -146,20 +144,6 @@ void omap34xxcam_vbq_complete(struct videobuf_buffer *vb, void *priv)
 	vb->state = VIDEOBUF_DONE;
 
 	wake_up(&vb->done);
-	#else
-	struct v4l2_fh *vfh = priv;
-	struct omap34xxcam_fh *ofh = to_omap34xxcam_fh(vfh);
-    //[LGE_CHANGE_END] 20110719, ajit.saunshikar@lge.com
-
-
-	do_gettimeofday(&vb->ts);
-	vb->field_count = atomic_add_return(2, &ofh->field_count);
-	vb->state = VIDEOBUF_DONE;
-
-	wake_up(&vb->done);
-    //[LGE_CHANGE_START] 20110719, ajit.saunshikar@lge.com	
-	#endif
-    //[LGE_CHANGE_END] 20110719, ajit.saunshikar@lge.com	
 	wake_up_all(&ofh->poll_vb);
 }
 
@@ -301,9 +285,10 @@ static int omap34xxcam_vbq_prepare(struct videobuf_queue *vbq,
 	 */
 	if (vb->baddr) {
 		/* This is a userspace buffer. */
-		if (vdev->pix.sizeimage > vb->bsize)
+		if (vdev->pix.sizeimage > vb->bsize) {
 			/* The buffer isn't big enough. */
 			return -EINVAL;
+		}
 	} else {
 		if (vb->state != VIDEOBUF_NEEDS_INIT
 		    && vdev->pix.sizeimage > vb->bsize)
@@ -614,9 +599,6 @@ static int try_pix_parm(struct omap34xxcam_videodev *vdev,
 				 * at same fps.
 				 */
 #ifdef CONFIG_VIDEO_OMAP3_SIZENEG_TRYBIGGER
-                               //[LGE_CHANGE_START] 20110719, ajit.saunshikar@lge.com
-				if (!(vdev->vdev_sensor_config.sensor_isp)){
-				//[LGE_CHANGE_END] 20110719, ajit.saunshikar@lge.com
 				if (frmi.width + frmi.height
 				    > best_pix_in->width + best_pix_in->height
 				    && FPS_ABS_DIFF(fps, frmi.discrete)
@@ -628,9 +610,6 @@ static int try_pix_parm(struct omap34xxcam_videodev *vdev,
 						best_pix_in->width,
 						best_pix_in->height);
 					goto do_it_now;
-	                //[LGE_CHANGE_START] 20110719, ajit.saunshikar@lge.com
-				}
-	                //[LGE_CHANGE_START] 20110719, ajit.saunshikar@lge.com
 				}
 #endif
 				dev_dbg(&vdev->vfd->dev, "falling through\n");
@@ -873,7 +852,7 @@ static int vidioc_dqbuf(struct file *file, void *_fh, struct v4l2_buffer *b)
 	struct v4l2_fh *vfh = _fh;
 	struct omap34xxcam_fh *ofh = to_omap34xxcam_fh(vfh);
 
-	return videobuf_dqbuf(&ofh->vbq, b, file->f_flags & O_NONBLOCK);;
+	return videobuf_dqbuf(&ofh->vbq, b, file->f_flags & O_NONBLOCK);
 }
 
 static void omap34xxcam_event_queue(struct omap34xxcam_fh *fh, u32 type)
@@ -1330,9 +1309,7 @@ static int vidioc_cropcap(struct file *file, void *_fh, struct v4l2_cropcap *a)
 
 	rval = vidioc_int_cropcap(vdev->vdev_sensor, a);
 
-        //LGE_CHANGE_S [ajit.saunshikar@lge.com] 2011_08_05 Froyo_to_GB 
 	if (rval) {
-        //LGE_CHANGE_E [ajit.saunshikar@lge.com] 2011_08_05 Froyo_to_GB 
 		struct v4l2_format f;
 		struct v4l2_rect pixel_size;
 
@@ -1395,11 +1372,10 @@ static int vidioc_g_crop(struct file *file, void *_fh, struct v4l2_crop *a)
 
 	mutex_lock(&vdev->mutex);
 
-	//if (vdev->vdev_sensor_config.sensor_isp){
-	//	rval = vidioc_int_g_crop(vdev->vdev_sensor, a);
-	//}else{
+//	if (vdev->vdev_sensor_config.sensor_isp)
+//		rval = vidioc_int_g_crop(vdev->vdev_sensor, a);
+//	else
 		rval = isp_g_crop(isp, a);
-	//}
 
 	mutex_unlock(&vdev->mutex);
 
@@ -1428,9 +1404,9 @@ static int vidioc_s_crop(struct file *file, void *_fh, struct v4l2_crop *a)
 
 	mutex_lock(&vdev->mutex);
 
-	//if (vdev->vdev_sensor_config.sensor_isp)
-	//	rval = vidioc_int_s_crop(vdev->vdev_sensor, a);
-	//else
+//	if (vdev->vdev_sensor_config.sensor_isp)
+//		rval = vidioc_int_s_crop(vdev->vdev_sensor, a);
+//	else
 		rval = isp_s_crop(isp, a);
 
 	mutex_unlock(&vdev->mutex);
@@ -1533,9 +1509,9 @@ static int vidioc_enum_frameintervals(struct file *file, void *_fh,
 		 */
 		dist = min(frms.discrete.width, frmi->width)
 		     * min(frms.discrete.height, frmi->height);
-		dist = frms.discrete.width * frms.discrete.height
-		     + frmi->width * frmi->height
-		     - 2*dist;
+		dist = frms.discrete.width *frms.discrete.height
+		     + frmi->width *frmi->height
+		     -2*dist;
 
 		if (dist < max_dist) {
 			width = frms.discrete.width;
@@ -1615,7 +1591,8 @@ int vidioc_unsubscribe_event(struct v4l2_fh *vfh,
  * feedback. The request is then passed on to the ISP private IOCTL handler,
  * isp_handle_private()
  */
-static long vidioc_default(struct file *file, void *_fh, int cmd, void *arg)
+static long vidioc_default(struct file *file, void *_fh,
+			   bool valid_prio, int cmd, void *arg)
 {
 	struct v4l2_fh *vfh = file->private_data;
 	struct omap34xxcam_fh *ofh = to_omap34xxcam_fh(vfh);
@@ -1893,10 +1870,10 @@ out_no_pix:
 	spin_lock_init(&ofh->vbq_lock);
 
 	videobuf_queue_sg_init(&ofh->vbq, &omap34xxcam_vbq_ops, NULL,
-			       &ofh->vbq_lock, V4L2_BUF_TYPE_VIDEO_CAPTURE,
-			       V4L2_FIELD_NONE,
-			       sizeof(struct videobuf_buffer), &ofh->vfh);
-
+				&ofh->vbq_lock, V4L2_BUF_TYPE_VIDEO_CAPTURE,
+				V4L2_FIELD_NONE,
+				sizeof(struct videobuf_buffer),
+							&ofh->vfh, NULL);
 	init_waitqueue_head(&ofh->poll_vb);
 
 	return 0;
@@ -1944,6 +1921,7 @@ static int omap34xxcam_release(struct file *file)
 	struct omap34xxcam_videodev *vdev = ofh->vdev;
 	struct device *isp = vdev->cam->isp;
 	int i;
+	struct videobuf_queue *q = &ofh->vbq;  //  ymjun [0719] : memleak patch from GB
 
 	mutex_lock(&vdev->mutex);
 	if (vdev->cam->streaming == file) {
@@ -1960,6 +1938,11 @@ static int omap34xxcam_release(struct file *file)
 					    OMAP34XXCAM_SLAVE_POWER_ALL);
 		isp_put();
 	}
+	
+	// (+)  ymjun [0719] : memleak patch from GB
+	videobuf_mmap_free(q); 
+	// (-)  ymjun [0719] : memleak patch from GB
+
 	mutex_unlock(&vdev->mutex);
 
 	file->private_data = NULL;

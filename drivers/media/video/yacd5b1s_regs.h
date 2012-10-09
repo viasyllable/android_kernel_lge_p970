@@ -1,3 +1,4 @@
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.07.26] - CAM : from black froyo
 /*
  * drivers/media/video/yacd5b1s_regs.h
  *
@@ -38,12 +39,6 @@
 #define YACD5B1S_MAX_METERING 3
 #define YACD5B1S_METERING_STEP 1
 #define YACD5B1S_DEF_METERING 0
-
-#if defined (B_COUNTRY_MX) || defined (B_COUNTRY_KR) || defined (B_COUNTRY_BR)
-#define CONFIG_FLICKER_60HZ 1	// 60Hz
-#else
-#define CONFIG_FLICKER_50HZ 1	// 50Hz
-#endif
 
 /* from yacd5b1s_registerSetting*/
 const static struct yacd5b1s_reg sensor_core_settings[] =
@@ -93,7 +88,9 @@ const static struct yacd5b1s_reg sensor_core_settings[] =
 	{0x10, 0x69, I2C_8BIT},
 	{0x03, 0x00, I2C_8BIT},
 	{0x10, 0x13, I2C_8BIT},
-	{0x11, 0x91, I2C_8BIT},
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.10.07] - CAM
+	{0x11, 0x90, I2C_8BIT}, //0x91->0x90 X flip
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.10.07] - CAM
 	{0x12, 0x04, I2C_8BIT},
 	{0x20, 0x00, I2C_8BIT},
 	{0x21, 0x02, I2C_8BIT},
@@ -117,8 +114,8 @@ const static struct yacd5b1s_reg sensor_core_settings[] =
 	{0x40, 0x80, I2C_8BIT},
 	{0x60, 0x25, I2C_8BIT},
 	{0x61, 0x69, I2C_8BIT},
-	{0x62, 0x6C, I2C_8BIT}, //20110302 Redish _69
-	{0x63, 0x40, I2C_8BIT}, //20110303 noise 수정 70
+	{0x62, 0x6C, I2C_8BIT}, //Redish 및 Color noise Tuning
+	{0x63, 0x40, I2C_8BIT}, //Color noise Tuning
 	{0x64, 0x41, I2C_8BIT},
 	{0x03, 0x20, I2C_8BIT},
 	{0x11, 0x0C, I2C_8BIT},
@@ -294,7 +291,7 @@ const static struct yacd5b1s_reg sensor_core_settings[] =
 	{0xea, 0x82, I2C_8BIT},
 	{0x03, 0x10, I2C_8BIT},
 	{0x13, 0x02, I2C_8BIT},
-	{0x41, 0x08, I2C_8BIT}, //20110303 noise 수정 0c
+	{0x41, 0x08, I2C_8BIT}, //Color noise Tuning
 	{0x30, 0x00, I2C_8BIT},
 	{0x31, 0x00, I2C_8BIT},
 	{0x32, 0x00, I2C_8BIT},
@@ -412,13 +409,13 @@ const static struct yacd5b1s_reg sensor_core_settings[] =
 	{0x58, 0x90, I2C_8BIT},
 	{0x59, 0x40, I2C_8BIT},
 	{0x5a, 0xd0, I2C_8BIT},
-	{0x5b, 0xa0, I2C_8BIT}, //20110302 Noise
+	{0x5b, 0xa0, I2C_8BIT}, //Color noise Tuning
 	{0x5c, 0xe0, I2C_8BIT},
 	{0x5d, 0x80, I2C_8BIT},
 	{0x5e, 0x88, I2C_8BIT},
 	{0x5f, 0x40, I2C_8BIT},
-	{0x60, 0xe0, I2C_8BIT},
-	{0x61, 0xe0, I2C_8BIT},
+	{0x60, 0xe0, I2C_8BIT}, //Color noise Tuning 
+	{0x61, 0xe0, I2C_8BIT}, //Color noise Tuning
 	{0x62, 0xe0, I2C_8BIT},
 	{0x63, 0x80, I2C_8BIT},
 	{0x70, 0x13, I2C_8BIT},
@@ -725,7 +722,7 @@ const static struct yacd5b1s_reg sensor_core_settings[] =
 	{0x6f, 0x00, I2C_8BIT}, //Redish Tuning 원복
 	{0x71, 0x82, I2C_8BIT},
 	{0x78, 0x33, I2C_8BIT},
-	{0x79, 0x3C, I2C_8BIT}, //20110303 AE
+	{0x79, 0x3C, I2C_8BIT}, //Color noise Tuning
 	{0x7a, 0x23, I2C_8BIT},
 	{0x7b, 0x22, I2C_8BIT},
 	{0x7d, 0x23, I2C_8BIT},
@@ -940,9 +937,9 @@ const static struct yacd5b1s_reg set_preview_vga_config[] =
 	{0x3f, 0x02, I2C_8BIT},
 	{0x60, 0x6b, I2C_8BIT},
 	{0x03, 0x12, I2C_8BIT},
-	{0x20, 0x0f, I2C_8BIT}, //20110302 Noise
-	{0x21, 0x0f, I2C_8BIT}, //20110302 Noise
-	{0x90, 0x5d, I2C_8BIT}, //20110302 Noise
+	{0x20, 0x0f, I2C_8BIT}, //Color noise Tuning
+	{0x21, 0x0f, I2C_8BIT}, //Color noise Tuning
+	{0x90, 0x5d, I2C_8BIT}, //Color noise Tuning
 	{0x03, 0x13, I2C_8BIT},
 	{0x80, 0x00, I2C_8BIT},
 	{0x03, 0x20, I2C_8BIT},
@@ -1029,9 +1026,9 @@ const static struct yacd5b1s_reg set_preview_qvga_config[] =
 	{0x3f, 0x02, I2C_8BIT},
 	{0x60, 0x6b, I2C_8BIT},
 	{0x03, 0x12, I2C_8BIT},
-	{0x20, 0x0f, I2C_8BIT}, //20110302 Noise
-	{0x21, 0x0f, I2C_8BIT}, //20110302 Noise
-	{0x90, 0x5d, I2C_8BIT}, //20110302 Noise
+	{0x20, 0x0f, I2C_8BIT}, //Color noise Tuning
+	{0x21, 0x0f, I2C_8BIT}, //Color noise Tuning
+	{0x90, 0x5d, I2C_8BIT}, //Color noise Tuning
 	{0x03, 0x13, I2C_8BIT},
 	{0x80, 0x00, I2C_8BIT},
 	{0x03, 0x20, I2C_8BIT},
@@ -1108,9 +1105,9 @@ const static struct yacd5b1s_reg set_preview_qcif_config[] =
 	{0x3f, 0x02, I2C_8BIT},
 	{0x60, 0x6b, I2C_8BIT},
 	{0x03, 0x12, I2C_8BIT},
-	{0x20, 0x0f, I2C_8BIT}, //20110302 Noise
-	{0x21, 0x0f, I2C_8BIT}, //20110302 Noise
-	{0x90, 0x5d, I2C_8BIT}, //20110302 Noise
+	{0x20, 0x0f, I2C_8BIT}, //Color noise Tuning
+	{0x21, 0x0f, I2C_8BIT}, //Color noise Tuning
+	{0x90, 0x5d, I2C_8BIT}, //Color noise Tuning
 	{0x03, 0x13, I2C_8BIT},
 	{0x80, 0x00, I2C_8BIT},
 	{0x03, 0x20, I2C_8BIT},
@@ -1180,7 +1177,9 @@ const static struct yacd5b1s_reg set_capture_2mpix_config[] =
 	{0x10, 0x69, I2C_8BIT},
 	{0x03, 0x00, I2C_8BIT},
 	{0x10, 0x00, I2C_8BIT},
-	{0x11, 0x90, I2C_8BIT},		// changed by prashanth
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.10.07] - CAM
+	{0x11, 0x90, I2C_8BIT}, //0x91->0x90 X flip
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.10.07] - CAM
 	{0x20, 0x00, I2C_8BIT},
 	{0x21, 0x0A, I2C_8BIT},
 	{0x22, 0x00, I2C_8BIT},
@@ -1236,7 +1235,9 @@ const static struct yacd5b1s_reg set_capture_1mpix_config[] =
 	{0x10, 0x69, I2C_8BIT},
 	{0x03, 0x00, I2C_8BIT},
 	{0x10, 0x00, I2C_8BIT},
-	{0x11, 0x90, I2C_8BIT},		// changed by prashanth
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.10.07] - CAM
+	{0x11, 0x90, I2C_8BIT}, //0x91->0x90 X flip
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.10.07] - CAM
 	{0x20, 0x00, I2C_8BIT},
 	{0x21, 0x0a, I2C_8BIT},
 	{0x22, 0x00, I2C_8BIT},
@@ -1311,7 +1312,9 @@ const static struct yacd5b1s_reg set_capture_vga_config[] =
 	{0x10, 0x69, I2C_8BIT},
 	{0x03, 0x00, I2C_8BIT},
 	{0x10, 0x00, I2C_8BIT},
-	{0x11, 0x90, I2C_8BIT},		// changed by prashanth
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.10.07] - CAM
+	{0x11, 0x90, I2C_8BIT}, //0x91->0x90 X flip
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.10.07] - CAM
 	{0x20, 0x00, I2C_8BIT},
 	{0x21, 0x0A, I2C_8BIT},
 	{0x22, 0x00, I2C_8BIT},
@@ -1386,7 +1389,9 @@ const static struct yacd5b1s_reg set_capture_qvga_config[] =
 	{0x10, 0x69, I2C_8BIT},
 	{0x03, 0x00, I2C_8BIT},
 	{0x10, 0x00, I2C_8BIT},
-	{0x11, 0x90, I2C_8BIT},			// changed by prashanth
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.10.07] - CAM
+	{0x11, 0x90, I2C_8BIT}, //0x91->0x90 X flip
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.10.07] - CAM
 	{0x20, 0x00, I2C_8BIT},
 	{0x21, 0x0A, I2C_8BIT},
 	{0x22, 0x00, I2C_8BIT},
@@ -1461,7 +1466,9 @@ const static struct yacd5b1s_reg set_capture_qcif_config[] =
 	{0x10, 0x69, I2C_8BIT},
 	{0x03, 0x00, I2C_8BIT},
 	{0x10, 0x00, I2C_8BIT},
-	{0x11, 0x90, I2C_8BIT},			// changed by prashanth
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.10.07] - CAM
+	{0x11, 0x90, I2C_8BIT}, //0x91->0x90 X flip
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.10.07] - CAM
 	{0x20, 0x00, I2C_8BIT},
 	{0x21, 0x0a, I2C_8BIT},
 	{0x22, 0x00, I2C_8BIT},
@@ -1546,9 +1553,9 @@ const static struct yacd5b1s_reg set_return_to_preview_vga_config[] =
 	{0x3f, 0x02, I2C_8BIT},
 	{0x60, 0x6b, I2C_8BIT},
 	{0x03, 0x12, I2C_8BIT},
-	{0x20, 0x0f, I2C_8BIT}, //20110302 Noise
-	{0x21, 0x0f, I2C_8BIT}, //20110302 Noise
-	{0x90, 0x5d, I2C_8BIT}, //20110302 Noise
+	{0x20, 0x0f, I2C_8BIT}, //Color noise Tuning
+	{0x21, 0x0f, I2C_8BIT}, //Color noise Tuning
+	{0x90, 0x5d, I2C_8BIT}, //Color noise Tuning
 	{0x03, 0x13, I2C_8BIT},
 	{0x80, 0x00, I2C_8BIT},
 	{0x03, 0x20, I2C_8BIT},
@@ -1629,9 +1636,9 @@ const static struct yacd5b1s_reg set_return_to_preview_qvga_config[] =
 	{0x3f, 0x02, I2C_8BIT},
 	{0x60, 0x6b, I2C_8BIT},
 	{0x03, 0x12, I2C_8BIT},
-	{0x20, 0x0f, I2C_8BIT}, //20110302 Noise
-	{0x21, 0x0f, I2C_8BIT}, //20110302 Noise
-	{0x90, 0x5d, I2C_8BIT}, //20110302 Noise
+	{0x20, 0x0f, I2C_8BIT}, //Color noise Tuning
+	{0x21, 0x0f, I2C_8BIT}, //Color noise Tuning
+	{0x90, 0x5d, I2C_8BIT}, //Color noise Tuning
 	{0x03, 0x13, I2C_8BIT},
 	{0x80, 0x00, I2C_8BIT},
 	{0x03, 0x20, I2C_8BIT},
@@ -1712,9 +1719,9 @@ const static struct yacd5b1s_reg set_return_to_preview_qcif_config[] =
 	{0x3f, 0x02, I2C_8BIT}, 
 	{0x60, 0x6b, I2C_8BIT}, 
 	{0x03, 0x12, I2C_8BIT}, 
-	{0x20, 0x0f, I2C_8BIT}, //20110302 Noise
-	{0x21, 0x0f, I2C_8BIT}, //20110302 Noise
-	{0x90, 0x5d, I2C_8BIT}, //20110302 Noise
+	{0x20, 0x0f, I2C_8BIT}, //Color noise Tuning
+	{0x21, 0x0f, I2C_8BIT}, //Color noise Tuning
+	{0x90, 0x5d, I2C_8BIT}, //Color noise Tuning
 	{0x03, 0x13, I2C_8BIT}, 
 	{0x80, 0x00, I2C_8BIT}, 
 	{0x03, 0x20, I2C_8BIT}, 
@@ -1889,8 +1896,8 @@ const static struct yacd5b1s_reg Color_Sepia[]={
 	{0x11, 0x03, I2C_8BIT},
 	{0x12, 0x33, I2C_8BIT},
 	{0x13, 0x00, I2C_8BIT}, 
-	{0x44, 0x70, I2C_8BIT},
-	{0x45, 0x98, I2C_8BIT},
+	{0x44, 0x6c, I2C_8BIT}, // To match main camera's sepia (ori:0x70) : 20120711
+	{0x45, 0x90, I2C_8BIT}, // To match main camera's sepia (ori:0x98) : 20120711
 	{I2C_REG_TERM, I2C_VAL_TERM, I2C_LEN_TERM}
 };
 
@@ -1962,7 +1969,7 @@ const static struct yacd5b1s_reg AWB_sun[]={
 const static struct yacd5b1s_reg AWB_tunsten[]={
 //CAMERA_PARAM_BALANCE_TUNSTEN:
 	{0x03, 0x22, I2C_8BIT},
-	{0x11,0x28, I2C_8BIT},
+	{0x11, 0x28, I2C_8BIT},
 	{0x80, 0x27, I2C_8BIT},
 	{0x82, 0x4C, I2C_8BIT},
 	{0x83, 0x29, I2C_8BIT},
@@ -2265,7 +2272,9 @@ const static struct yacd5b1s_reg VT_sensor_core_settings[] =
 	{0x10, 0x69, I2C_8BIT},
 	{0x03, 0x00, I2C_8BIT},
 	{0x10, 0x13, I2C_8BIT},
-	{0x11, 0xB4, I2C_8BIT}, //20111007 adhpathi.reddy@lge.com for GTalk
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.10.07] - CAM
+	{0x11, 0xB4, I2C_8BIT}, //0xB5->0xB4 X flip
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.10.07] - CAM
 	{0x12, 0x04, I2C_8BIT},
 	{0x20, 0x00, I2C_8BIT},
 	{0x21, 0x02, I2C_8BIT},
@@ -2287,12 +2296,12 @@ const static struct yacd5b1s_reg VT_sensor_core_settings[] =
 	{0x03, 0x10, I2C_8BIT},
 	{0x12, 0x30, I2C_8BIT},
 	{0x40, 0x80, I2C_8BIT},
-	{0x41, 0x08, I2C_8BIT}, //20110303 noise 수정 0C
+	{0x41, 0x08, I2C_8BIT}, //Color noise Tuning
 	{0x50, 0x68, I2C_8BIT},
-	{0x60, 0x2F, I2C_8BIT}, //20110225 Noise
+	{0x60, 0x2F, I2C_8BIT}, //Color noise Tuning
 	{0x61, 0x69, I2C_8BIT},
 	{0x62, 0x6F, I2C_8BIT},
-	{0x63, 0x40, I2C_8BIT}, //20110303 noise 수정 70
+	{0x63, 0x40, I2C_8BIT}, //Color noise Tuning
 	{0x64, 0x41, I2C_8BIT},
 	{0x03, 0x20, I2C_8BIT},
 	{0x11, 0x0C, I2C_8BIT},
@@ -2345,10 +2354,10 @@ const static struct yacd5b1s_reg VT_sensor_core_settings[] =
 	{0x9a, 0x03, I2C_8BIT},
 	{0x9b, 0x03, I2C_8BIT},
 	{0x9c, 0x03, I2C_8BIT},
-	{0xa0, 0x42, I2C_8BIT}, //20110225 Noise
-	{0xa2, 0x42, I2C_8BIT}, //20110225 Noise
-	{0xa4, 0x42, I2C_8BIT}, //20110225 Noise
-	{0xa6, 0x42, I2C_8BIT}, //20110225 Noise
+	{0xa0, 0x42, I2C_8BIT}, //Color noise Tuning
+	{0xa2, 0x42, I2C_8BIT}, //Color noise Tuning
+	{0xa4, 0x42, I2C_8BIT}, //Color noise Tuning
+	{0xa6, 0x42, I2C_8BIT}, //Color noise Tuning
 	{0xa8, 0x45, I2C_8BIT},
 	{0xaa, 0x45, I2C_8BIT},
 	{0xac, 0x45, I2C_8BIT},
@@ -2468,7 +2477,7 @@ const static struct yacd5b1s_reg VT_sensor_core_settings[] =
 	{0xea, 0x82, I2C_8BIT},
 	{0x03, 0x10, I2C_8BIT},
 	{0x13, 0x02, I2C_8BIT},
-	{0x41, 0x08, I2C_8BIT}, //20110303 noise 수정 0C 
+	{0x41, 0x08, I2C_8BIT}, //Color noise Tuning
 	{0x30, 0x00, I2C_8BIT},
 	{0x31, 0x00, I2C_8BIT},
 	{0x32, 0x00, I2C_8BIT},
@@ -2586,13 +2595,13 @@ const static struct yacd5b1s_reg VT_sensor_core_settings[] =
 	{0x58, 0x90, I2C_8BIT},
 	{0x59, 0x40, I2C_8BIT},
 	{0x5a, 0xd0, I2C_8BIT},
-	{0x5b, 0xa0, I2C_8BIT}, //20110302 Noise
+	{0x5b, 0xa0, I2C_8BIT}, //Color noise Tuning
 	{0x5c, 0xe0, I2C_8BIT},
 	{0x5d, 0x80, I2C_8BIT},
 	{0x5e, 0x88, I2C_8BIT},
 	{0x5f, 0x40, I2C_8BIT},
-	{0x60, 0xe0, I2C_8BIT},
-	{0x61, 0xe0, I2C_8BIT},
+	{0x60, 0xe0, I2C_8BIT}, //Color noise Tuning
+	{0x61, 0xe0, I2C_8BIT}, //Color noise Tuning
 	{0x62, 0xe0, I2C_8BIT},
 	{0x63, 0x80, I2C_8BIT},
 	{0x70, 0x13, I2C_8BIT},
@@ -2607,7 +2616,7 @@ const static struct yacd5b1s_reg VT_sensor_core_settings[] =
 	{0x85, 0x1a, I2C_8BIT},
 	{0x88, 0x00, I2C_8BIT},
 	{0x89, 0x00, I2C_8BIT},
-	{0x90, 0x5c, I2C_8BIT},
+	{0x90, 0x5c, I2C_8BIT}, //Color noise Tuning
 	{0x3b, 0x06, I2C_8BIT},
 	{0x3c, 0x06, I2C_8BIT},
 	{0xc5, 0x30, I2C_8BIT},
@@ -2938,7 +2947,7 @@ const static struct yacd5b1s_reg VT_sensor_core_settings[] =
 	{0x9f, 0x90, I2C_8BIT},
 #endif
 	{0xb1, 0x0a, I2C_8BIT},
-	{0xb2, 0x8C, I2C_8BIT}, //20110225 Noise
+	{0xb2, 0x8C, I2C_8BIT}, //Color noise Tuning
 	{0xb3, 0x0e, I2C_8BIT},
 	{0xb4, 0x0a, I2C_8BIT},
 	{0xb5, 0x24, I2C_8BIT},
@@ -3120,7 +3129,9 @@ const static struct yacd5b1s_reg VT_Night_mode_on[]={
 	{0x03, 0x22, I2C_8BIT},
 	{0x10, 0x69, I2C_8BIT},
 	{0x03, 0x00, I2C_8BIT},
-	{0x11, 0x91, I2C_8BIT},
+//--[[ LGE_UBIQUIX_MODIFIED_START : ymjun@mnbt.co.kr [2011.10.07] - CAM
+	{0x11, 0x90, I2C_8BIT}, //0x91->0x90 X flip
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.10.07] - CAM
 		   
 	{0x03, 0x10, I2C_8BIT},
 	{0x41, 0x10, I2C_8BIT},
@@ -3213,3 +3224,4 @@ const static struct yacd5b1s_reg VT_Night_mode_off[]={
 	{I2C_REG_TERM, I2C_VAL_TERM, I2C_LEN_TERM}
 };
 */
+//--]] LGE_UBIQUIX_MODIFIED_END : ymjun@mnbt.co.kr [2011.07.26] - CAM : from black froyo
