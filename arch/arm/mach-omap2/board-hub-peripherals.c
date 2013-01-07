@@ -978,7 +978,7 @@ static int __init omap_i2c_init(void)
 		omap_ctrl_writel(prog_io, OMAP36XX_CONTROL_PROG_IO_WKUP1);
 	}
 
-	omap_pmic_init(1, 400, "twl5030", INT_34XX_SYS_NIRQ, &hub_twldata);
+	omap_pmic_init(1, 400, "twl4030", INT_34XX_SYS_NIRQ, &hub_twldata);
 	omap_register_i2c_bus(2, 400, hub_i2c_bus2_info,
 			ARRAY_SIZE(hub_i2c_bus2_info));
 	omap_register_i2c_bus(3, 400, hub_i2c_bus3_info,
