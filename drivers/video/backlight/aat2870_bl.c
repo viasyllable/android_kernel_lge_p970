@@ -66,7 +66,7 @@
 EXPORT_SYMBOL(aat2870_i2c_client); //20101222 seven.kim@lge.com for touch ESD recovery
 
 //extern void bd2802_resume_for_lcd(); //2011205 kyungyoon.kim@lge.com lcd resume speed
-extern void bd2802_resume_for_lcd(void); //2011205 kyungyoon.kim@lge.com lcd resume speed, // 20120213 taeju.park@lge.com To delete compile warning, specifying 0 arguments
+//extern void bd2802_resume_for_lcd(void); //2011205 kyungyoon.kim@lge.com lcd resume speed, // 20120213 taeju.park@lge.com To delete compile warning, specifying 0 arguments
 
 
 extern unsigned int system_rev;
@@ -661,14 +661,10 @@ int aat2870_ldo_status(void)
 /* 20110216 seven.kim@lge.com to check AAT2870 LDO_ABCD_EN_REG [END] */
 void aat2870_shutdown(void)
 {
-    struct aat2870_device *dev;
     DBG("aat2870_shutdown ..\n");
 
     aat2870_write_reg(aat2870_i2c_client, LDO_ABCD_EN_REG, 0x00);
     mdelay(1);   	
-
-    dev = i2c_get_clientdata(aat2870_i2c_client);
-    dev->bl_resumed = 0;
 	
     gpio_direction_output(LCD_CP_EN, 0);
    
@@ -759,10 +755,17 @@ static void aat2870_set_main_current_level(struct i2c_client *client, int level)
 
 	// LGE_B_DOM_S 2011218 kyungrae.jo@lge.com, use max current
 	//max 25.2mA, min 1.8mA
-	if(level > 30)
+/*	if(level > 30)
 		val = (unsigned char)(level * 28 / 255);
 	else
-		val = (unsigned char)(level * 2 / 30);
+		val = (unsigned char)(level * 2 / 30);*/
+	// LGE_B_DOM_E 2011218 kyungrae.jo@lge.com, use max current
+
+	// Huexxx: linear with two slopes, max 24.3mA
+	if(level > 85)
+	        val = (unsigned char)((level * 33 / 255)-6);
+        else
+                val = (unsigned char)(level * 15 / 255);
 	// LGE_B_DOM_E 2011218 kyungrae.jo@lge.com, use max current
 	
 	val = 0xE0 | val;
@@ -888,14 +891,8 @@ static void aat2870_backlight_off(struct i2c_client *client)
 static int aat2870_bl_set_intensity(struct backlight_device *bd)
 {
 	struct i2c_client *client = to_i2c_client(bd->dev.parent);
-	struct aat2870_device *dev = NULL;
-
-	dev = (struct aat2870_device *) i2c_get_clientdata(client);
 
 	DBG("\n");
-
-	if (!dev->bl_resumed)
-                return 0;
 
 	aat2870_set_main_current_level(client, bd->props.brightness);
 
@@ -1497,7 +1494,6 @@ static void aat2870_early_suspend(struct early_suspend *h)
 	DBG("\n");
 	dev = container_of(h, struct aat2870_device, early_suspend);
 
-	hrtimer_cancel(&dev->als_timer);
 	/* 20110218 seven.kim@lge.com to contorl AAT2870 sleep/resume state machine [START] */
 	g_AAT2870_State_Machine = AAT2870_EARLY_SUSPEND_STATE;
 	/* 20110218 seven.kim@lge.com to contorl AAT2870 sleep/resume state machine [END] */
@@ -1525,7 +1521,6 @@ static void aat2870_late_resume(struct early_suspend *h)
 	/* 20110218 seven.kim@lge.com to contorl AAT2870 sleep/resume state machine [END] */
 
 	 /* 20110304 seven.kim@lge.com late_resume_lcd [START] */	
-	 hrtimer_start(&dev->als_timer, ktime_set(0,500000000), HRTIMER_MODE_REL); //20100304 seven.kim@lge.com late_reaume_lcd changed 100ms -> 500ms
 	 aat2870_bl_resume(dev->client); //20110321 for black lcd display
  	 /* 20110304 seven.kim@lge.com late_resume_lcd [END] */
 
@@ -1733,7 +1728,6 @@ static int aat2870_probe(struct i2c_client *i2c_dev, const struct i2c_device_id 
 	dev->early_suspend.resume = aat2870_late_resume;
 	register_early_suspend(&dev->early_suspend);
 #endif
-	dev->bl_resumed = 1;
 	
 	gpio_request(LCD_CP_EN, "LCD_CP_EN");
 
